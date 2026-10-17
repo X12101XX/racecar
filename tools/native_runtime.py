@@ -1,4 +1,4 @@
-"""Private native ROS runtime. Uses existing dependencies; never invokes pip/apt/colcon."""
+"""Private native runtime and unified entry. Uses existing dependencies; never invokes pip/apt/colcon."""
 import argparse
 import fcntl
 import hashlib
@@ -135,11 +135,21 @@ def main(argv=None):
     if args == ['_probe']:
         internal_probe()
         return 0
-    ap = argparse.ArgumentParser(prog='crossfire', description=__doc__)
-    ap.add_argument('action', choices=['install', 'doctor', 'run'] + (['sim', 'ros-sim'] if (ROOT/'sim').is_dir() else []))
+    ap = argparse.ArgumentParser(
+        prog='crossfire',
+        description='统一入口：按当前包内容提供安装、自检、配置界面、测试、'
+                    '只读实车运行与本机/ROS 仿真；不自动安装或升级系统包。')
+    actions = ['install', 'doctor', 'run']
+    if (ROOT / 'sim').is_dir():
+        actions += ['sim', 'ros-sim']
+    if (ROOT / 'tools/selfcheck.sh').is_file():
+        actions += ['test']
+    if (ROOT / 'tools/config_editor.py').is_file():
+        actions += ['ui']
+    ap.add_argument('action', choices=actions)
     ap.add_argument('--ros-setup', type=Path, default=Path('/opt/ros/humble/setup.bash'))
     ap.add_argument('--python', default='/usr/bin/python3')
-    child_mode = bool(args and args[0] in ('run', 'sim', 'ros-sim'))
+    child_mode = bool(args and args[0] in ('run', 'sim', 'ros-sim', 'test', 'ui'))
     opts, rest = ap.parse_known_args(args[:1] if child_mode else args)
     if child_mode: rest = args[1:]
     try:
@@ -147,6 +157,15 @@ def main(argv=None):
             if rest:
                 ap.error('未知安装参数: ' + ' '.join(rest))
             return prepare(opts.ros_setup, opts.python)
+        if opts.action == 'test':
+            if os.geteuid() == 0:
+                raise ValueError('请以普通用户运行测试，不要 sudo')
+            os.execvpe('bash', ['bash', str(ROOT / 'tools/selfcheck.sh'), *rest],
+                       environment())
+        if opts.action == 'ui':
+            os.execvpe(sys.executable,
+                       [sys.executable, '-B', str(ROOT / 'tools/config_editor.py'), *rest],
+                       environment())
         if opts.action == 'sim':
             os.execve(sys.executable, [sys.executable, '-B', str(ROOT / 'tools/run_local_sim.py'), *rest], environment())
         if opts.action in ('run', 'ros-sim') and any(x in ('-h', '--help') for x in rest):

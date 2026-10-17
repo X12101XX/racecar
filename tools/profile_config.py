@@ -70,7 +70,7 @@ def compile_profile(p,destination):
     # Simulation truth is deliberately in a separate file, not in controller field.json.
     (d/'sim_cones.json').write_text(json.dumps(p['cones'],ensure_ascii=False,indent=2))
     (d/'scene.json').write_text(json.dumps(p,ensure_ascii=False,indent=2))
-    (d/'README.txt').write_text('仿真（在仿真项目目录执行）: bash tools/run_ros_sim.sh --profile /本配置目录/scene.json --route A\n实车: bash tools/run_car.sh A --config-dir 本目录路径\n实车仍受已标定 vehicle_profile.json 的限速及动作确认限制。\n')
+    (d/'README.txt').write_text('本机仿真（在仿真项目目录执行）: ./crossfire sim --profile /本配置目录/scene.json --route A\n原生 ROS DDS: ./crossfire ros-sim --profile /本配置目录/scene.json --route A\n实车: bash tools/run_car.sh A --config-dir 本目录路径\n实车仍受已标定 vehicle_profile.json 的限速及动作确认限制。\n')
     return result
 
 

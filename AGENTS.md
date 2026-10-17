@@ -56,6 +56,7 @@
 - C++ 在目标架构的本包目录中编译，不把笔记本 x86 `.so` 部署到 ARM64。缺编译器时如实报告回退，不能把 Python 执行写成 C++ 已启用。
 - 安装和 `doctor` 不创建 ROS 节点、不初始化模型推理、不启动传感器或底盘。运行环境仅作用于本包子进程。
 - `./crossfire run A` 默认只读，不创建速度发布者，连零速度都不能向底盘发送。预检失败时不得继续启用输出。
+- Web 配置界面的“运行本机仿真”只允许固定调用 `tools/run_local_sim.py`，不得扩展为 `ros2 run`、网关或底盘命令；它只写 `output/` 与 `.runtime/ui-sim/`，不修改已保存 profile。
 - 实车接管需要用户对实际动作的授权及有效标定。不得为了通过启动检查而把 `config/vehicle_profile.json` 中的确认项设为 true，也不能猜测舵角单位、轴距、车体尺寸或制动距离。
 - 任务指令先发到 `/crossfire/desired_cmd`，由独立 `gateway.py` 接入已确认的底盘话题。不能绕过网关、急停、传感器超时、竞争发布者检测或看门狗。
 - 保留跨版本控制权锁。该锁在任务运行时使用 `~/.local/state/crossfire/mission.lock`；安装和只读 preflight 不创建它。
@@ -86,8 +87,14 @@
 ./crossfire --help
 ./crossfire sim --help
 ./crossfire run --help
+./crossfire ui --help
 
-# 默认本机自检：私有 C++ 编译、单元测试、A/B 和色卡算法闭环
+# 快速迭代：单元测试 + Route A；完整自检再加 A/B/色卡
+./crossfire test --quick
+./crossfire test
+
+# 等价底层入口（--ros / --docker 为显式选择）
+bash tools/selfcheck.sh --quick
 bash tools/selfcheck.sh
 
 # 针对当前配置的快速检查；录像时去掉 --no-video

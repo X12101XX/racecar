@@ -54,7 +54,7 @@ copytree(ROOT/'docs/evidence',car/'docs/evidence')
 实车不运行仿真；本机无 Docker 仿真使用完整仿真包中的 ./crossfire sim。
 详见 docs/09_原生安装与隔离运行.md。
 
-现场配置界面：bash tools/configure.sh（打开打印的本机地址）
+现场配置界面：./crossfire ui（或 bash tools/configure.sh；打开打印的本机地址）
 导出配置后：bash tools/run_car.sh A --config-dir profiles/generated/配置名
 运动预设：--motion-preset conservative / standard / aggressive
 详见 docs/现场配置与运动调参.md。

@@ -89,7 +89,7 @@ flowchart TD
 
 ```text
 racecar/
-├── crossfire               # 统一入口：安装、环境检查、只读运行、本机/ROS 仿真
+├── crossfire               # 统一入口：安装、环境检查、配置界面、测试、只读运行、本机/ROS 仿真
 ├── racelib/                # 核心算法库（Python + 可选 C++，无 ROS 依赖）
 │   ├── ackermann.py        # 基于自行车模型的 Hybrid A* 混合路径规划与扫掠碰撞检测
 │   ├── localization.py     # 场地墙面正交投影修正定位算法
@@ -115,13 +115,14 @@ racecar/
 ├── profiles/               # 现场实测配置与历史快照（由可视化工具生成）
 ├── models/                 # 可复现的 RGB 阈值 ONNX 图及模型说明
 ├── tools/                  # 运维、测试与启动工具脚本
-│   ├── configure.sh        # 一键启动 Web 场地配置界面
+│   ├── configure.sh        # 一键启动 Web 配置与本机测试界面
+│   ├── config_editor.py    # 仅回环监听；保存配置并可启动隔离的本机仿真
 │   ├── native_runtime.py  # 原生私有运行环境，不调用 colcon 或 ros2 run
-│   ├── run_local_sim.py   # 本机无 Docker 仿真，支持已保存场地
+│   ├── run_local_sim.py   # 本机无 Docker 仿真，支持已保存或临时配置
 │   ├── run_ros_sim.sh      # 可选的旧 Docker 仿真
-│   ├── selfcheck.sh        # 全套自动化单元测试与闭环验证
+│   ├── selfcheck.sh        # 单元测试与闭环验证；--quick 为快速模式
 │   └── package_release.py  # 打包实车独立自解压发布包
-├── ui/                     # 现场配置界面前端静态文件 (HTML/JS)
+├── ui/                     # 配置 + 本机测试前端静态文件 (HTML/JS)
 ├── docs/                   # 技术文档与标定指南
 │   ├── competition/        # 赛题规格说明与传感器物料资料
 │   ├── evidence/           # 历史实车底盘驱动证据与实测数据
@@ -136,10 +137,12 @@ racecar/
 ### 1. 启动现场 Web 可视化配置
 在现场遇到场地微调、封锁线间距变动或围栏歪斜时，运行配置工具：
 ```bash
-bash tools/configure.sh
+./crossfire ui
+# 等价入口：bash tools/configure.sh
 ```
 - 控制台将打印本地 Web 访问地址（默认 `http://127.0.0.1:8765/`，端口被占时自动顺延）。
-- **功能**：拖拽起点、据点和锥桶坐标；配置歪斜围栏四角；切换保守/标准/激进三种运动预设；一键保存并导出实车/仿真通用的配置 profile。
+- **配置**：拖拽起点、据点和锥桶坐标；配置歪斜围栏四角；切换保守/标准/激进三种运动预设；一键保存并导出实车/仿真通用的配置 profile。
+- **本机测试**：页面内可直接运行当前配置（不必先保存），选择路线 A/B、C++/Python 规划、无颜色/颜色/色卡模式、seed 和是否录像；完成后显示结果指标、俯视图或视频，并给出播放命令。测试只调用 `tools/run_local_sim.py`，不启动 ROS、底盘或实车进程。
 
 ### 2. 默认本机仿真（无需 Docker / ROS）
 
@@ -168,9 +171,13 @@ mpv output/latest/video.mp4
 ### 4. 工程自检与全量回归测试
 默认运行本机单元测试、静态接口契约和算法闭环；已有原生 ROS 时可增加 DDS 与急停验证：
 ```bash
-bash tools/selfcheck.sh             # 默认无 Docker
-bash tools/selfcheck.sh --ros       # 需先 ./crossfire install
-# 旧隔离测试需显式选择 --docker
+./crossfire test --quick            # 单元测试 + Route A，本地快速迭代
+./crossfire test                    # 单元测试 + A/B/色卡闭环
+./crossfire test --ros              # 需先 ./crossfire install，增加 DDS/急停
+./crossfire test --docker           # 旧隔离测试，显式选择
+# 等价的底层入口：
+bash tools/selfcheck.sh --quick
+bash tools/selfcheck.sh
 ```
 
 ---
