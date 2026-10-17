@@ -13,6 +13,7 @@ import subprocess
 import sys
 import shutil
 import time
+from types import SimpleNamespace
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -29,6 +30,7 @@ from racelib.vision import CameraModel
 from .world import SimWorld, SimRobotConfig, generate_cones
 from .scenarios import demo_cones
 from .camera import CameraRenderer
+from .lidar_view import draw_lidar_view
 
 
 class WorldNode(Node):
@@ -83,7 +85,7 @@ class WorldNode(Node):
         self.create_subscription(String,'/crossfire/gateway_state',self.gate,10)
         self.estop_pub=self.create_publisher(Bool,'/crossfire/estop',1)
         self.received_cmd=0;self.last_cmd=0.;self.command=(0.,0.);self.last_state={};self.events=[]
-        self.mission_markers=[];self.estimated_trajectory=[]
+        self.mission_markers=[];self.estimated_trajectory=[];self.last_scan_sample=None
         self.gateway=[];self.trajectory=[];self.wall0=time.monotonic();self.last=self.wall0
         self.last_image=0.;self.last_scan=0.;self.done=False;self.camp_truth=False
         self.frames=[];self.last_frame=0.;self.last_echo=0.;self.failure_test=None
@@ -122,7 +124,7 @@ class WorldNode(Node):
             # LaserScan has a uniform nominal angular grid; the per-beam angle
             # jitter is already reflected in the measured ranges.
             nominal=np.linspace(-math.pi,math.pi,len(q.ranges),endpoint=False)
-            m.angle_min=float(nominal[0]);m.angle_max=float(nominal[-1]);m.angle_increment=float(nominal[1]-nominal[0]);m.range_min=.12;m.range_max=12.;m.ranges=q.ranges.astype(float).tolist();self.scan.publish(m);self.last_scan=now
+            m.angle_min=float(nominal[0]);m.angle_max=float(nominal[-1]);m.angle_increment=float(nominal[1]-nominal[0]);m.range_min=.12;m.range_max=12.;m.ranges=q.ranges.astype(float).tolist();self.scan.publish(m);self.last_scan=now;self.last_scan_sample=q
         q=self.world.imu_sample(t);m=Imu();m.header.stamp=stamp;m.header.frame_id='base_link'
         m.orientation.z=math.sin(q.yaw/2);m.orientation.w=math.cos(q.yaw/2)
         m.angular_velocity.z=float(q.yaw_rate);m.linear_acceleration.x=float(q.accel[0]);m.linear_acceleration.y=float(q.accel[1]);m.linear_acceleration.z=float(q.accel[2]);self.imu.publish(m)
@@ -191,6 +193,18 @@ class WorldNode(Node):
                 arrow(yaw if self.command[0]>0 else yaw+math.pi,.75,'#008eb8')
         else:
             movement='WAIT'
+        track_objs=[]
+        for m in self.mission_markers:
+            if m.type!=Marker.CYLINDER:
+                continue
+            color='blue' if m.color.b>m.color.r else 'red' if m.color.r>m.color.b else 'unknown'
+            track_objs.append(SimpleNamespace(x=m.pose.position.x,y=m.pose.position.y,
+                radius=max(.05,float(m.scale.x)*.5),color=color))
+        lidar=draw_lidar_view(self.last_scan_sample,
+            pose_est if isinstance(pose_est,list) and len(pose_est)>=3 else None,
+            track_objs,size=(300,160),car_length=self.world.robot.length,
+            car_width=self.world.robot.width,title='LIDAR / BODY FRAME')
+        canvas.paste(lidar,(890,8))
         cam=PI.fromarray(a).resize((600,450));canvas.paste(cam,(590,180))
         d.text((30,25),f'ROS2 Humble | Route {self.expected_route} | {"MONOCHROME" if self.is_mono else "COLOR"} | ACKERMANN',fill='white')
         d.text((30,65),f't={self.world.t:.1f}s  state={self.last_state.get("state","WAITING")}  sensor map {sum(1 for m in self.mission_markers if m.type==Marker.CYLINDER)} cones',fill='white')

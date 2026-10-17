@@ -26,6 +26,7 @@ from racelib.vision import CameraModel, Vision
 
 from .camera import CameraRenderer
 from .io_sim import SimIO
+from .lidar_view import draw_lidar_view
 from .world import SimCone, SimRobotConfig, SimWorld, generate_cones
 
 
@@ -410,11 +411,43 @@ def draw_map(field: Field, cones: Sequence[SimCone], mission: Optional[Mission] 
     return img
 
 
+def _mission_panel(mission: Mission, io: SimIO, t: float,
+                   size: Tuple[int, int]) -> Image.Image:
+    """Text panel built only from mission state and sensor-derived estimates."""
+    width, height = size
+    img = Image.new("RGB", size, (12, 20, 28))
+    draw = ImageDraw.Draw(img)
+    scan = mission.last_scan
+    points = 0
+    if scan is not None:
+        points = int(np.isfinite(scan.ranges).sum())
+    stats = mission.cones.stats()
+    pose = mission.pose()
+    path_len = len(mission._path) if mission._path is not None else 0
+    lines = [
+        "MISSION / SENSOR ONLY",
+        f"t={t:5.2f}s   state={mission.state}",
+        f"route={mission.cfg.route}   planner={mission.metrics.get('planner_engine', '?')}",
+        f"pose est: x={pose[0]:.2f} y={pose[1]:.2f} yaw={pose[2]:.2f}",
+        f"cmd: v={io.last_cmd[0]:.2f} m/s  w={io.last_cmd[1]:.2f} rad/s",
+        f"scan: {points} pts",
+        f"tracks: blue={stats['blue']} red={stats['red']} unknown={stats['unknown']}",
+        f"path: {path_len} pts   waypoints={len(mission._waypoints)}",
+    ]
+    y = max(18, int(height * 0.09))
+    for i, line in enumerate(lines):
+        draw.text((12, y + i * max(18, height // 12)), line,
+                  fill=(190, 215, 225) if i else (120, 235, 205))
+    draw.text((12, height - 18), "truth only in evaluation artifacts",
+              fill=(120, 145, 158))
+    return img
+
+
 def _compose_frame(renderer: CameraRenderer, cam: CameraModel, world: SimWorld,
                    mission: Mission, io: SimIO, t: float,
                    cfgs: Dict[str, Config],
                    image: Optional[np.ndarray] = None) -> Image.Image:
-    """把相机画面 + 俯视图合成为一帧（用于录屏视频）。"""
+    """Compose camera + sensor map + LiDAR + mission status for the video."""
     if image is None:
         image = renderer.render(world.cones, world.pose)
     cam_img = Image.fromarray(image)
@@ -456,9 +489,16 @@ def _compose_frame(renderer: CameraRenderer, cam: CameraModel, world: SimWorld,
                   pose=pose_est,
                   title=f"route {mission.cfg.route}  state {mission.state}  "
                         f"sensor map {len(tracks)} cones")
-    out = Image.new("RGB", (cam.width * 2, cam.height), (20, 20, 20))
+    lidar_img = draw_lidar_view(mission.last_scan, pose_est, tracks,
+                                size=(cam.width, cam.height),
+                                car_length=mission.car_len,
+                                car_width=mission.car_wid)
+    status = _mission_panel(mission, io, t, (cam.width, cam.height))
+    out = Image.new("RGB", (cam.width * 2, cam.height * 2), (20, 20, 20))
     out.paste(cam_img, (0, 0))
     out.paste(mp, (cam.width, 0))
+    out.paste(lidar_img, (0, cam.height))
+    out.paste(status, (cam.width, cam.height))
     return out
 
 

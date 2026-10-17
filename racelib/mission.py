@@ -198,6 +198,11 @@ class Mission:
     def pose(self) -> Tuple[float, float, float]:
         return self.estimator.pose
 
+    @property
+    def last_scan(self) -> Optional[Scan]:
+        """Latest consumed LiDAR sample (for sensor-only visualization)."""
+        return self._last_scan
+
     def perception_for(self, image: Optional[np.ndarray]) -> Optional[VisionResult]:
         """返回该图像已缓存的视觉结果；不要为可视化重复执行有状态的视觉管线。"""
         if image is not None and image is self._last_vision_image:
