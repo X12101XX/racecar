@@ -97,6 +97,7 @@ class ColorContractTests(unittest.TestCase):
         mission=AckermannMission(SimIO(),load_all())
         mission.estimator.set_pose(1,2,0)
         mission.cones.snapshot=lambda:[Cone(1.365,2,'unknown',.115)]
+        mission._rear_clearance=lambda:0.0   # no safe reverse available
         with mock.patch('racelib.ackermann.hybrid_astar',return_value=None) as search:
             self.assertEqual(mission._drive_to((4,2),.4),(0.,0.))
             self.assertGreaterEqual(search.call_args.args[2].margin,.06)

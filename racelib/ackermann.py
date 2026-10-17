@@ -194,6 +194,9 @@ class AckermannMission(Mission):
         self._plan_future = None
         self._executor = None
         self._failed_plans = 0
+        self._escape_until = -1e9
+        self._last_escape_t = -1e9
+        self._escape_attempts = 0
         self.async_planning = bool(getattr(io, "params", {}).get("async_planning", False))
         self.metrics['drive_model'] = 'ackermann'
         self.metrics['monochrome'] = bool(self.cfg.monochrome)
@@ -273,6 +276,11 @@ class AckermannMission(Mission):
         if now < self._switch_until:
             return 0., 0.
         world = self._world()
+        if now < self._escape_until:
+            cmd = self._escape_command(world, pose)
+            if cmd is not None:
+                return cmd
+            self._escape_until = now
         changed = self._last_goal is None or np.linalg.norm(np.array(goal)-self._last_goal) > .2
         blocked = bool(self._segment and any(not world.clear(p) for p in self._segment[self._next_index::2]))
         if changed or blocked:
@@ -282,6 +290,19 @@ class AckermannMission(Mission):
             self._select_segment()
         if not self._segment:
             self._speed = 0.
+            # If the current footprint already overlaps the fused map (map
+            # noise, a dense drawn wall, or a tracking error), no planner can
+            # start. Back out along a short collision-checked arc, then replan.
+            if not world.clear(pose) and now - self._last_escape_t > 1.0 \
+                    and self._escape_attempts < 4:
+                self._last_escape_t = now
+                self._escape_attempts += 1
+                self._escape_until = now + 1.6
+                self.log('escape_start', attempt=self._escape_attempts,
+                         clearance=round(self.footprint_clearance(), 3))
+                cmd = self._escape_command(world, pose)
+                if cmd is not None:
+                    return cmd
             if now - self._last_attempt < .6:
                 return 0., 0.
             self._last_attempt = now
@@ -313,6 +334,7 @@ class AckermannMission(Mission):
                 self.log('path_discarded', reason='map_changed')
                 return 0., 0.
             self._failed_plans=0
+            self._escape_attempts=0
             self._hybrid_path = path[1:]
             self._select_segment()
             if not self._segment:
@@ -362,6 +384,22 @@ class AckermannMission(Mission):
         v = self._direction * self._speed
         self._path = arr[:,:2]  # diagnostics / visualization
         return v, v*k
+
+    def _escape_command(self, world, pose):
+        """Short, collision-checked reverse arc out of a map-overlap trap."""
+        if self._rear_clearance() < 0.22:
+            return None
+        kmax = math.tan(self.steer_limit) / self.wheelbase
+        speed = min(0.12, self.motion["reverse_mps"])
+        for k in (0.0, 0.5 * kmax, -0.5 * kmax, kmax, -kmax):
+            end = integrate(pose, -0.35, k)
+            if not world.clear(end):
+                continue
+            if not all(world.clear(integrate(pose, d, k))
+                       for d in (-0.15, -0.22, -0.30, -0.35)):
+                continue
+            return -speed, -speed * k
+        return None
 
     def _select_segment(self):
         self._segment = []
