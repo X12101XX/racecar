@@ -11,7 +11,11 @@ from racelib.lidarproc import Scan
 
 
 class SimIO(RobotIO):
-    """带时间戳的数据缓存：每次只交付"未消费过"的最新样本。"""
+    """带时间戳的传感器缓存：每次只交付“未消费过”的最新样本。
+
+    The mission sees only these simulated sensor messages; world truth is not
+    exposed here.
+    """
 
     def __init__(self, t0: float = 0.0):
         self._t = float(t0)

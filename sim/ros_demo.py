@@ -21,6 +21,7 @@ from sensor_msgs.msg import LaserScan, Imu, Image
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String, Bool
+from visualization_msgs.msg import Marker, MarkerArray
 from racelib.config import load_all,default_config_dir
 from racelib.settings import MOTION_PRESETS,motion_settings,validate_field
 from racelib.field import Field
@@ -78,9 +79,11 @@ class WorldNode(Node):
         self.create_subscription(Twist,'/crossfire/sim_cmd',self.cmd,1)
         self.create_subscription(String,'/crossfire/mission/state',self.state,10)
         self.create_subscription(String,'/crossfire/mission/events',self.event,10)
+        self.create_subscription(MarkerArray,'/crossfire/mission/markers',self.on_markers,10)
         self.create_subscription(String,'/crossfire/gateway_state',self.gate,10)
         self.estop_pub=self.create_publisher(Bool,'/crossfire/estop',1)
         self.received_cmd=0;self.last_cmd=0.;self.command=(0.,0.);self.last_state={};self.events=[]
+        self.mission_markers=[];self.estimated_trajectory=[]
         self.gateway=[];self.trajectory=[];self.wall0=time.monotonic();self.last=self.wall0
         self.last_image=0.;self.last_scan=0.;self.done=False;self.camp_truth=False
         self.frames=[];self.last_frame=0.;self.last_echo=0.;self.failure_test=None
@@ -99,6 +102,8 @@ class WorldNode(Node):
     def event(self,msg):
         try:self.events.append(json.loads(msg.data))
         except ValueError:pass
+    def on_markers(self,msg):
+        self.mission_markers=list(msg.markers)
     def gate(self,msg):
         try:self.gateway.append([time.monotonic(),json.loads(msg.data)])
         except ValueError:pass
@@ -114,7 +119,10 @@ class WorldNode(Node):
         stamp=self.get_clock().now().to_msg();t=self.world.t
         if not (self.args.fault=='scan_drop' and t>4) and now-self.last_scan>=.10:
             q=self.world.lidar_scan(t);m=LaserScan();m.header.stamp=stamp;m.header.frame_id='base_link'
-            m.angle_min=float(q.angles[0]);m.angle_max=float(q.angles[-1]);m.angle_increment=float(q.angles[1]-q.angles[0]);m.range_min=.12;m.range_max=12.;m.ranges=q.ranges.astype(float).tolist();self.scan.publish(m);self.last_scan=now
+            # LaserScan has a uniform nominal angular grid; the per-beam angle
+            # jitter is already reflected in the measured ranges.
+            nominal=np.linspace(-math.pi,math.pi,len(q.ranges),endpoint=False)
+            m.angle_min=float(nominal[0]);m.angle_max=float(nominal[-1]);m.angle_increment=float(nominal[1]-nominal[0]);m.range_min=.12;m.range_max=12.;m.ranges=q.ranges.astype(float).tolist();self.scan.publish(m);self.last_scan=now
         q=self.world.imu_sample(t);m=Imu();m.header.stamp=stamp;m.header.frame_id='base_link'
         m.orientation.z=math.sin(q.yaw/2);m.orientation.w=math.cos(q.yaw/2)
         m.angular_velocity.z=float(q.yaw_rate);m.linear_acceleration.x=float(q.accel[0]);m.linear_acceleration.y=float(q.accel[1]);m.linear_acceleration.z=float(q.accel[2]);self.imu.publish(m)
@@ -123,6 +131,9 @@ class WorldNode(Node):
             card_now = self.card_to_show if t < 2.5 else None
             a=self.renderer.render(self.world.cones,self.world.pose,card_color=card_now);m=Image();m.header.stamp=stamp;m.height=a.shape[0];m.width=a.shape[1];m.encoding='rgb8';m.step=a.shape[1]*3;m.data=a.tobytes();self.image.publish(m);self.last_image=now
         self.trajectory.append([t,*self.world.pose,self.world.v,self.world.w,*self.command])
+        state_pose=self.last_state.get('pose')
+        if isinstance(state_pose,list) and len(state_pose)>=3:
+            self.estimated_trajectory.append([t,*state_pose[:3]])
         if now-self.last_frame>=.25:
             card_now = self.card_to_show if t < 2.5 else None
             self.save_frame(a if 'a' in locals() else self.renderer.render(self.world.cones,self.world.pose,card_color=card_now));self.last_frame=now
@@ -147,31 +158,44 @@ class WorldNode(Node):
         d.polygon([xy(*p) for p in (f.boundary or [[0,0],[f.length,0],[f.length,f.width],[0,f.width]])],fill='#d8d8d8',outline='white')
         for name,z in f.zones.items():
             d.polygon([xy(*p) for p in z.corners()],outline='#505050');d.text(xy(z.cx-.36,z.cy),{'stronghold_a':'Base A','stronghold_b':'Base B','camp_a':'Camp A','camp_b':'Camp B'}[name],fill='#111111',font=small)
-        for c in self.world.cones:
-            x,y=xy(c.x,c.y);r=c.radius_base*scale;d.ellipse((x-r,y-r,x+r,y+r),fill='#555555')
-        from racelib.geometry import rect_corners
-        d.line([xy(p[0],p[1]) for p in rect_corners(*self.world.pose[:2],self.world.robot.length,self.world.robot.width,self.world.yaw)]+[xy(*__import__('racelib.geometry',fromlist=['rect_corners']).rect_corners(self.world.x,self.world.y,self.world.robot.length,self.world.robot.width,self.world.yaw)[0])],fill='#007d9c',width=4)
-        if len(self.trajectory)>2:d.line([xy(p[1],p[2]) for p in self.trajectory[::4]],fill='#007d9c',width=2)
-        # Distinguish the physical front camera from the signed travel direction.
-        x,y,yaw=self.world.pose
-        def arrow(angle,length,color):
-            a=xy(x,y);b=xy(x+length*math.cos(angle),y+length*math.sin(angle))
-            ux,uy=math.cos(angle),-math.sin(angle)
-            d.line([a,b],fill=color,width=3)
-            d.polygon([b,(b[0]-9*ux+4*uy,b[1]-9*uy-4*ux),
-                         (b[0]-9*ux-4*uy,b[1]-9*uy+4*ux)],fill=color)
-        for angle in (yaw-math.pi/4,yaw+math.pi/4):
-            d.line([xy(x,y),xy(x+.85*math.cos(angle),y+.85*math.sin(angle))],fill='#bf7527',width=1)
-        arrow(yaw,.48,'#e59626')
-        movement='STOP'
-        if abs(self.world.v)>.025:
-            movement='FORWARD' if self.world.v>0 else 'REVERSE'
-            arrow(yaw if self.world.v>0 else yaw+math.pi,.75,'#008eb8')
+        # Top-down panel: mission markers/estimated pose only.  World truth is
+        # kept in world.json/summary for scoring, never drawn as robot state.
+        for m in self.mission_markers:
+            if m.type != Marker.CYLINDER:
+                continue
+            x,y=xy(m.pose.position.x,m.pose.position.y)
+            r=max(4.,float(m.scale.x)*scale*.5)
+            fill=tuple(int(255*max(0.,min(1.,c))) for c in (m.color.r,m.color.g,m.color.b))
+            d.ellipse((x-r,y-r,x+r,y+r),fill=fill,outline='#dddddd')
+        pose_est=self.last_state.get('pose')
+        if isinstance(pose_est,list) and len(pose_est)>=3:
+            x,y,yaw=map(float,pose_est[:3])
+            from racelib.geometry import rect_corners
+            corners=[xy(p[0],p[1]) for p in rect_corners(x,y,self.world.robot.length,self.world.robot.width,yaw)]
+            d.line(corners+[corners[0]],fill='#007d9c',width=4)
+            if len(self.estimated_trajectory)>2:
+                d.line([xy(p[1],p[2]) for p in self.estimated_trajectory[::4]],fill='#007d9c',width=2)
+            # Distinguish the physical front camera from the signed travel direction.
+            def arrow(angle,length,color):
+                a0=xy(x,y);b=xy(x+length*math.cos(angle),y+length*math.sin(angle))
+                ux,uy=math.cos(angle),-math.sin(angle)
+                d.line([a0,b],fill=color,width=3)
+                d.polygon([b,(b[0]-9*ux+4*uy,b[1]-9*uy-4*ux),
+                             (b[0]-9*ux-4*uy,b[1]-9*uy+4*ux)],fill=color)
+            for angle in (yaw-math.pi/4,yaw+math.pi/4):
+                d.line([xy(x,y),xy(x+.85*math.cos(angle),y+.85*math.sin(angle))],fill='#bf7527',width=1)
+            arrow(yaw,.48,'#e59626')
+            movement='STOP'
+            if abs(self.command[0])>.025:
+                movement='FORWARD' if self.command[0]>0 else 'REVERSE'
+                arrow(yaw if self.command[0]>0 else yaw+math.pi,.75,'#008eb8')
+        else:
+            movement='WAIT'
         cam=PI.fromarray(a).resize((600,450));canvas.paste(cam,(590,180))
         d.text((30,25),f'ROS2 Humble | Route {self.expected_route} | {"MONOCHROME" if self.is_mono else "COLOR"} | ACKERMANN',fill='white')
-        d.text((30,65),f't={self.world.t:.1f}s  state={self.last_state.get("state","WAITING")}  collisions={len(self.world.contacts)}',fill='white')
+        d.text((30,65),f't={self.world.t:.1f}s  state={self.last_state.get("state","WAITING")}  sensor map {sum(1 for m in self.mission_markers if m.type==Marker.CYLINDER)} cones',fill='white')
         d.text((30,100),f'command SI: v={self.command[0]:.2f} m/s, w={self.command[1]:.2f} rad/s',fill='white')
-        d.text((30,135),f'drive={movement} | orange: body front / camera | cyan: travel',fill='white',font=small)
+        d.text((30,135),f'drive={movement} | orange: body front / camera | cyan: estimated travel',fill='white',font=small)
         d.text((590,155),'FRONT CAMERA - fixed to body heading',fill='#e59626',font=small)
         self.frames=[canvas]
         self.video_proc.stdin.write(canvas.tobytes())

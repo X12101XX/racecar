@@ -156,6 +156,8 @@ mpv output/latest/video.mp4
 
 默认执行同一算法与自行车模型，不含 DDS 和独立网关；需要已有 NumPy/Pillow，OpenCV/SciPy 可选，视频使用已有 ffmpeg。每次创建新结果目录，保存独立配置快照。
 
+仿真信息边界：`SimWorld` 只负责生成物理真值和带噪声的雷达/IMU/里程计/相机样本；任务状态机只通过 `RobotIO` 接收这些传感器数据，不读取世界中的锥桶真值、真实位姿或碰撞结果。普通 `map.png`、视频俯视图和 `trajectory_estimated.csv` 使用任务自己的估计；`evaluation_truth.png`、`cones.json`、`trajectory.csv` 和 `summary.json` 中的碰撞/召回率只用于赛后评分，不参与控制。显式传入 `--prior` 或勾选“已知”障碍时属于赛前公布信息，不属于运行时真值注入。
+
 ### 3. 完整原生 ROS 仿真（已有 Humble 时）
 
 ```bash

@@ -87,7 +87,8 @@ def main() -> int:
         parts.append("")
         parts.append("- 视频：`output/demo_routeA/video.mp4`、`output/demo_routeB/video.mp4`"
                      "（左：相机画面 + 识别框；右：锥桶地图 + 规划路径 + 车体位置）")
-        parts.append("- 轨迹：同名目录下 `trajectory.csv` 与 `map.png`")
+        parts.append("- 轨迹/地图：`trajectory_estimated.csv` 与 `map.png` 是任务估计；"
+                     "`trajectory.csv`、`evaluation_truth.png` 是评分真值")
     parts.append("")
     parts.append("## 3. 结论与边界")
     parts.append("")

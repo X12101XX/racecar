@@ -1,4 +1,8 @@
-"""完整任务仿真：传感器 -> 任务状态机 -> 底盘，记录轨迹/视频/指标。"""
+"""完整任务仿真：世界真值 -> 模拟传感器 -> 任务状态机 -> 底盘。
+
+The mission never receives ``world.cones`` or ``world.pose``.  Truth is used
+only to synthesize sensor samples and, after the run, to score the result.
+"""
 
 from __future__ import annotations
 
@@ -54,6 +58,9 @@ class RunResult:
     outdir: Optional[str] = None
     video_path: Optional[str] = None
     cone_map_dump: Dict[str, Any] = field(default_factory=dict)
+    # Estimated pose/map produced by the mission, not simulator truth.
+    estimated_trajectory: Optional[np.ndarray] = None
+    tracks: List[Any] = field(default_factory=list)
 
     @property
     def success(self) -> bool:
@@ -175,6 +182,7 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
             print(f"[sim] 先验锥桶已注入地图：{seeded} 个（来自赛前公布的位置）")
 
     traj: List[Tuple[float, float, float, float]] = []
+    estimated_traj: List[Tuple[float, float, float, float]] = []
     frames: List[Image.Image] = []
     t_next_scan = 0.0
     t_next_image = 0.0
@@ -207,6 +215,8 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
             pitch_noise = float(rng.normal(0, math.radians(0.2)))
             if needs_camera:
                 card_now = (cfg.card_color or ("blue" if cfg.route == "A" else "red")) if (cfg.use_card and t < 2.5) else None
+                # Truth -> physical camera sensor synthesis.  The image is the
+                # only thing handed to the mission via SimIO.
                 img = renderer.render(world.cones, world.pose,
                                       yaw_noise=yaw_noise, pitch_noise=pitch_noise,
                                       card_color=card_now)
@@ -230,7 +240,12 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
                 reached_camp = True
             if state_now in (State.DONE, State.FAILED):
                 break
+            # Keep simulator truth and the mission's sensor-derived estimate
+            # separate.  trajectory.csv is truth for evaluation; the normal
+            # map/video uses only estimated_trajectory.
             traj.append((t, world.x, world.y, world.yaw))
+            px, py, pyaw = mission.pose()
+            estimated_traj.append((t, px, py, pyaw))
 
         # ---- 录制画面 ----
         if cfg.video and t >= t_next_frame:
@@ -278,6 +293,12 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
     })
     perception = evaluate_perception(mission, cones)
     summary["perception"] = perception
+    summary["map_source"] = "mission_sensor_fusion"
+    summary["evaluation_truth"] = {
+        "map": "evaluation_truth.png",
+        "cones": "cones.json",
+        "trajectory": "trajectory.csv",
+    }
     cone_map_dump = {
         "tracks": [{"x": round(t.x, 3), "y": round(t.y, 3), "r": round(t.radius, 3),
                     "color": t.color, "hits": t.hits, "spread": round(t.spread, 3),
@@ -290,7 +311,9 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
     result = RunResult(summary=summary, events=mission.events,
                        trajectory=np.asarray(traj, dtype=float),
                        contacts=sim_metrics["contact_events"], perception=perception,
-                       wall_time_s=wall_time)
+                       wall_time_s=wall_time,
+                       estimated_trajectory=np.asarray(estimated_traj, dtype=float),
+                       tracks=mission.cones.snapshot())
     result.cone_map_dump = cone_map_dump
 
     if cfg.outdir:
@@ -314,6 +337,12 @@ def draw_map(field: Field, cones: Sequence[SimCone], mission: Optional[Mission] 
              path: Optional[np.ndarray] = None, waypoints: Optional[Sequence] = None,
              tracks: Optional[Sequence] = None, pose: Optional[Tuple[float, float, float]] = None,
              title: str = "") -> Image.Image:
+    """Draw a field view.
+
+    ``cones`` is simulator truth and is intended only for the separate
+    evaluation image.  Normal maps pass an empty sequence and draw ``tracks``
+    (the mission's sensor-fused estimate) instead.
+    """
     img = Image.new("RGB", size, (28, 30, 34))
     d = ImageDraw.Draw(img)
     margin = 28
@@ -344,7 +373,7 @@ def draw_map(field: Field, cones: Sequence[SimCone], mission: Optional[Mission] 
         tx, ty = W2P(z.center)
         d.text((tx - 16, ty - 5), name.replace("stronghold", "据点").replace("camp", "营地")
                .replace("start", "起点"), fill=(240, 240, 240))
-    # 先验/真值锥桶
+    # 仅评估用真值锥桶（普通 map.png 传入空列表）
     for c in cones:
         x, y = W2P([c.x, c.y])
         r = 0.115 * px_per_m
@@ -411,19 +440,22 @@ def _compose_frame(renderer: CameraRenderer, cam: CameraModel, world: SimWorld,
                        f"CARD {res.card_color}", fill=(255, 255, 0))
     tracks = mission.cones.snapshot()
     stats = mission.cones.stats()
+    pose_est = mission.pose()
     text = (f"t={t:5.2f}s  state={mission.state:<15s} route={mission.cfg.route}  "
             f"cones B{stats['blue']}/R{stats['red']}/?{stats['unknown']}  "
             f"cmd=({io.last_cmd[0]:.2f}, {io.last_cmd[1]:.2f})")
     d.rectangle([0, cam.height - 20, cam.width, cam.height], fill=(0, 0, 0))
     d.text((6, cam.height - 16), text, fill=(0, 255, 120))
 
-    mp = draw_map(renderer.field, world.cones, mission,
-                  trajectory=np.array([[0.0, world.x, world.y, world.yaw]]),
+    # The top-down panel is the robot's own estimate. Truth is deliberately
+    # not drawn here; it belongs to the separate evaluation artifacts.
+    mp = draw_map(renderer.field, [], mission,
+                  trajectory=np.array([[t, pose_est[0], pose_est[1], pose_est[2]]]),
                   size=(cam.width, cam.height), path=mission._path,
                   waypoints=mission._waypoints, tracks=tracks,
-                  pose=world.pose,
+                  pose=pose_est,
                   title=f"route {mission.cfg.route}  state {mission.state}  "
-                        f"detected {len(tracks)} cones")
+                        f"sensor map {len(tracks)} cones")
     out = Image.new("RGB", (cam.width * 2, cam.height), (20, 20, 20))
     out.paste(cam_img, (0, 0))
     out.paste(mp, (cam.width, 0))
@@ -448,15 +480,32 @@ def _save_artifacts(result: RunResult, cfgs: Dict[str, Config],
     if len(result.trajectory):
         np.savetxt(os.path.join(outdir, "trajectory.csv"), result.trajectory,
                    delimiter=",", header="t,x,y,yaw", comments="")
-    mp = draw_map(field, cones,
-                  trajectory=result.trajectory,
+    estimated = (result.estimated_trajectory
+                 if result.estimated_trajectory is not None
+                 and len(result.estimated_trajectory) else result.trajectory)
+    if len(estimated):
+        np.savetxt(os.path.join(outdir, "trajectory_estimated.csv"), estimated,
+                   delimiter=",", header="t,x,y,yaw", comments="")
+    # Normal map: sensor-derived tracks/pose/plan only.
+    mp = draw_map(field, [],
+                  trajectory=estimated,
+                  tracks=result.tracks,
                   size=(900, 560),
-                  title=(f"route {cfg.route} seed {cfg.seed} "
+                  title=(f"route {cfg.route} seed {cfg.seed} sensor map "
                          f"state={result.summary.get('final_state')} "
                          f"time={result.summary.get('run_time_s')}s "
-                         f"blue_hits={result.summary.get('blue_cone_hits')} "
-                         f"red_hits={result.summary.get('red_cone_hits')}"))
+                         f"tracks={len(result.tracks)}"))
     mp.save(os.path.join(outdir, "map.png"))
+    # Evaluation-only truth overlay, never used by the controller.
+    truth_mp = draw_map(field, cones,
+                        trajectory=result.trajectory,
+                        tracks=result.tracks,
+                        size=(900, 560),
+                        title=(f"evaluation truth route {cfg.route} "
+                               f"seed {cfg.seed} state={result.summary.get('final_state')} "
+                               f"blue_hits={result.summary.get('blue_cone_hits')} "
+                               f"red_hits={result.summary.get('red_cone_hits')}"))
+    truth_mp.save(os.path.join(outdir, "evaluation_truth.png"))
     if frames and cfg.save_frames:
         fdir = os.path.join(outdir, "frames")
         os.makedirs(fdir, exist_ok=True)

@@ -137,15 +137,23 @@ class SimRobotConfig:
     accel_tau: float = 0.12              # 一阶速度响应时间常数
     odom_scale_error: float = 0.015      # 编码器 1.5% 标定误差（产生里程漂移）
     odom_noise: float = 0.006
+    odom_w_scale_error: float = 0.010    # 轮速差推算角速度的标定误差
+    odom_w_noise: float = 0.010          # rad/s
     imu_gyro_bias: float = 0.004         # rad/s
     imu_gyro_noise: float = 0.01
     imu_yaw_drift_deg_min: float = 1.2
     imu_accel_noise: float = 0.05
     lidar_noise: float = 0.010
+    lidar_angle_noise: float = 0.0015     # rad；编码器/装配角度误差
 
 
 class SimWorld:
-    """一个可重复（给定随机种子）的赛场仿真。"""
+    """一个可重复（给定随机种子）的赛场真值仿真。
+
+    ``cones``/``pose``/``contacts`` are truth.  The mission must consume only
+    the noisy samples returned by ``lidar_scan``/``imu_sample``/``odom_sample``
+    (and the rendered camera image) through SimIO.
+    """
 
     def __init__(self, field: Field, cones: Sequence[SimCone],
                  rng: np.random.Generator,
@@ -257,6 +265,11 @@ class SimWorld:
         """
         n = self.lidar_beams
         ang = np.linspace(-math.pi, math.pi, n, endpoint=False)      # 车体系
+        # Real encoders never report a mathematically perfect angular grid.
+        # Apply a small per-beam angle error before ray casting and report the
+        # same measured angles to the mission.
+        if self.robot.lidar_angle_noise > 0:
+            ang = ang + self.rng.normal(0.0, self.robot.lidar_angle_noise, size=n)
         ang_w = ang + self.yaw                                       # 世界系
         d = np.stack([np.cos(ang_w), np.sin(ang_w)], axis=-1)
         o = np.array([self.x, self.y], dtype=float)
@@ -320,7 +333,11 @@ class SimWorld:
     def odom_sample(self, t: float) -> OdomSample:
         r = self.robot
         v_meas = self.v * (1.0 + r.odom_scale_error) + float(self.rng.normal(0.0, r.odom_noise))
-        return OdomSample(t=t, v=v_meas, w=self.w)
+        # Wheel-differential yaw rate is noisy and slightly mis-scaled; the
+        # mission should not receive the simulator's exact angular velocity.
+        w_meas = self.w * (1.0 + r.odom_w_scale_error) + float(
+            self.rng.normal(0.0, r.odom_w_noise))
+        return OdomSample(t=t, v=v_meas, w=w_meas)
 
     # ---------------------------------------------------------------- #
     def metrics(self) -> Dict[str, Any]:

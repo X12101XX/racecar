@@ -12,7 +12,7 @@
 <p id="simOut" class="note"></p>
 <video id="simPlayer" controls playsinline class="hidden"></video><img id="simMap" alt="最近一次仿真俯视图" class="hidden">
 <details id="simLogBox"><summary>运行日志</summary><pre id="simLog">运行后显示日志。</pre></details>
-<p class="note">只调用隔离的本机算法仿真；不启动 ROS、底盘或实车进程。未保存的修改也会用于本次测试。快捷键：Ctrl+S 保存，Ctrl+Enter 运行。</p></div>
+<p class="note">只调用隔离的本机算法仿真；不启动 ROS、底盘或实车进程。未保存的修改也会用于本次测试。快捷键：Ctrl+S 保存，Ctrl+Enter 运行。结果中的碰撞数和召回/精度是仿真真值评分，不进入控制器；地图与规划只使用传感器融合结果。</p></div>
 <h2>现场俯视图</h2><p class="note">拖动区域中心、起点、锥桶或围栏角点。左下角为 (0,0)，车头 0° 朝右、90° 朝上。</p><canvas id="map" width="1000" height="690" aria-label="可拖动的场地俯视图"></canvas><div class="row" style="margin-top:12px"><button id="add">添加障碍</button><button id="remove" class="danger">删除选中障碍</button><button id="quad">使用围栏四角</button><button id="rectangle">恢复矩形围栏</button></div><p id="selection" class="note"></p><h2>检查结果</h2><div id="result">修改后点击校验。官方尺寸与间距仅提示，几何越界会阻止导出。</div><div class="row" style="margin-top:12px"><button id="check">校验</button><button id="download">导出配置包 ZIP</button><button id="json">导出源配置 JSON</button><label>导入 JSON <input type="file" id="import" accept=".json" style="width:200px"></label></div><h2>运行命令</h2><div id="commands">保存后显示仿真与实车命令。</div><p class="note">实车保持只读默认。物理急停、失联保护、已标定的底盘限速不会被运动预设关闭。</p></section>
 <section><h2>场地包围框与起点</h2><div class="grid" id="arena"></div><p class="note">修改长宽不会自动缩放已量好的区域或障碍；图上越界会提示。</p><h2>区域尺寸与位置</h2><table><thead><tr><th>区域</th><th>x</th><th>y</th><th>长</th><th>宽</th></tr></thead><tbody id="zones"></tbody></table><h2>雷区与封锁线</h2><div class="grid" id="minefield"></div><h2>围栏四角（可选）</h2><p class="note">围栏略歪时填写四个实测角点，按顺/逆时针排序，每行 x,y；保持在包围框内。不填则为矩形。</p><textarea id="boundary" rows="4" placeholder="0,0&#10;7,0.08&#10;6.9,4&#10;0.05,3.95"></textarea><button id="applyBoundary">更新角点</button><h2>指定路线</h2><div class="grid" id="routes"></div><h2>车辆尺寸</h2><div class="grid" id="geometry"></div><h2 id="motionTitle" style="scroll-margin-top:16px">运动风格</h2><div class="row"><button data-preset="conservative">保守</button><button data-preset="standard">标准</button><button data-preset="aggressive">激进</button></div><p class="note">激进会提高直行/弯道速度和加速度，保留相应规划余量。可继续细调；切换预设覆盖下方运动值。</p><div class="grid" id="motion"></div><p id="effective" class="warn"></p><h2>障碍坐标</h2><p class="note">“已知”表示赛前已测量，加入控制器地图。未勾选仅出现在仿真世界，由雷达发现；所有障碍统一避让。</p><table><thead><tr><th>#</th><th>x</th><th>y</th><th>半径</th><th>已知</th></tr></thead><tbody id="cones"></tbody></table></section></main>
 <script>
@@ -44,11 +44,11 @@ function renderSim(s){
     card('结果',m.final_state||'—',!ok),
     card('任务计时 / s',m.run_time_s??'—'),
     card('wall / s',m.wall_time_s??'—'),
-    card('锥桶接触',m.cone_contacts??'—',(m.cone_contacts||0)>0),
-    card('围栏接触',m.wall_contacts??'—',(m.wall_contacts||0)>0),
-    card('红锥碰撞',m.red_cone_hits??'—',(m.red_cone_hits||0)>0),
-    card('最小间隙 / m',m.min_cone_clearance_m??'—'),
-    card('召回 / 精度',`${m.perception?.recall??'—'} / ${m.perception?.precision??'—'}`)
+    card('仿真评分 · 锥桶接触',m.cone_contacts??'—',(m.cone_contacts||0)>0),
+    card('仿真评分 · 围栏接触',m.wall_contacts??'—',(m.wall_contacts||0)>0),
+    card('仿真评分 · 红锥碰撞',m.red_cone_hits??'—',(m.red_cone_hits||0)>0),
+    card('任务估计 · 最小间隙 / m',m.min_cone_clearance_m??'—'),
+    card('仿真评分 · 召回 / 精度',`${m.perception?.recall??'—'} / ${m.perception?.precision??'—'}`)
   ].join('');
   $('simActions').style.display='flex';
   $('simOut').textContent='结果目录：'+s.outdir;
