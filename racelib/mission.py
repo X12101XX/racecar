@@ -33,6 +33,7 @@ class State:
     INIT = "INIT"
     CARD = "CARD"
     ANNOUNCE = "ANNOUNCE"
+    MAPPING = "MAPPING"
     GO_STRONGHOLD = "GO_STRONGHOLD"
     HOLD = "HOLD"
     CROSS = "CROSS"
@@ -60,6 +61,10 @@ class MissionConfig:
     card_timeout_s: float = 12.0
     cross_speed_mps: float = 0.55
     creep_speed_mps: float = 0.22
+    # Static survey before the first motion. The Ackermann chassis cannot spin
+    # in place, but a stationary 360-degree LiDAR still fuses several frames.
+    mapping_seconds: float = 2.0
+    mapping_min_scans: int = 5
 
     @classmethod
     def from_config(cls, cfg: Config, route: Optional[str] = None,
@@ -72,10 +77,14 @@ class MissionConfig:
             mc.monochrome = bool(cfg.get("mission.monochrome", False))
         if route:
             mc.route = str(route).upper()
-        for k in ("hold_seconds", "zone_tolerance_m", "center_tolerance_m"):
+        for k in ("hold_seconds", "zone_tolerance_m", "center_tolerance_m",
+                  "mapping_seconds"):
             v = cfg.get(f"mission.{k}")
             if v is not None:
                 setattr(mc, k, float(v))
+        v = cfg.get("mission.mapping_min_scans")
+        if v is not None:
+            mc.mapping_min_scans = max(1, int(v))
         st = cfg.get("mission.stage_timeout_s")
         if isinstance(st, dict):
             mc.stage_timeout_s = {k: float(v) for k, v in st.items()}
@@ -146,6 +155,7 @@ class Mission:
             "min_cone_clearance_m": None,
         }
         self._last_scan_t = -1.0
+        self._scan_count = 0
         self._last_img_t = -1.0
         self._last_odom: Optional[OdomSample] = None
         self._last_imu: Optional[ImuSample] = None
@@ -231,6 +241,7 @@ class Mission:
             State.INIT: self._st_init,
             State.CARD: self._st_card,
             State.ANNOUNCE: self._st_announce,
+            State.MAPPING: self._st_mapping,
             State.GO_STRONGHOLD: self._st_go_stronghold,
             State.HOLD: self._st_hold,
             State.CROSS: self._st_cross,
@@ -263,6 +274,7 @@ class Mission:
         scan = self.io.scan()
         if scan is not None and scan.t > self._last_scan_t:
             self._last_scan_t = scan.t
+            self._scan_count += 1
             self._last_scan = scan
             dets = extract_cones(scan.points_body())
             pose = self.pose()
@@ -631,8 +643,32 @@ class Mission:
                          f"据点 {self.route.get('stronghold')} -> 营地 {self.route.get('camp')}"])
         self.metrics["announced"] = True
         self.log("announce", text=text)
-        self.state = State.GO_STRONGHOLD
+        self.state = State.MAPPING
         self.state_t0 = self.io.now()
+        self.log("mapping_start", seconds=self.cfg.mapping_seconds,
+                 min_scans=self.cfg.mapping_min_scans)
+        return 0.0, 0.0
+
+    def _st_mapping(self, dt: float) -> Tuple[float, float]:
+        """Stay put while the first LiDAR frames build the obstacle map."""
+        now = self.io.now()
+        elapsed = now - self.state_t0
+        timed_out = elapsed >= max(self.cfg.mapping_seconds + 1.5, 2.5)
+        enough = (elapsed >= self.cfg.mapping_seconds
+                  and self._scan_count >= self.cfg.mapping_min_scans)
+        if not (enough or timed_out):
+            return 0.0, 0.0
+        if self._scan_count == 0:
+            self._fail("建图阶段未收到雷达数据")
+            return 0.0, 0.0
+        self.metrics["mapping_time_s"] = round(elapsed, 3)
+        self.metrics["mapping_scans"] = self._scan_count
+        self.metrics["mapping_tracks"] = len(self.cones.blockers())
+        self.log("mapping_done", seconds=round(elapsed, 3),
+                 scans=self._scan_count, tracks=self.metrics["mapping_tracks"],
+                 timed_out=timed_out)
+        self.state = State.GO_STRONGHOLD
+        self.state_t0 = now
         return 0.0, 0.0
 
     # ----------------------------------------------------------------- #

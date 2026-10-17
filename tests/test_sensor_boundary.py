@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 
 from racelib.config import load_all  # noqa: E402
 from racelib.ackermann import AckermannMission  # noqa: E402
+from racelib.mission import State  # noqa: E402
 from sim.io_sim import SimIO  # noqa: E402
 
 
@@ -43,6 +44,22 @@ class TestSensorBoundary(unittest.TestCase):
         for call in calls:
             names = [arg.id for arg in call.args if isinstance(arg, ast.Name)]
             self.assertNotIn("world", names)
+
+    def test_mapping_stays_stopped_until_scans_are_available(self):
+        io = SimIO()
+        mission = AckermannMission(io, load_all(route="A"))
+        mission.state = State.ANNOUNCE
+        mission.state_t0 = io.now()
+        mission._st_announce(0.02)
+        self.assertEqual(mission.state, State.MAPPING)
+        io.advance(0.2)
+        self.assertEqual(mission._st_mapping(0.02), (0.0, 0.0))
+        self.assertEqual(mission.state, State.MAPPING)
+        mission._scan_count = mission.cfg.mapping_min_scans
+        io.advance(mission.cfg.mapping_seconds)
+        mission._st_mapping(0.02)
+        self.assertEqual(mission.state, State.GO_STRONGHOLD)
+        self.assertTrue(any(e["event"] == "mapping_done" for e in mission.events))
 
 
 if __name__ == "__main__":

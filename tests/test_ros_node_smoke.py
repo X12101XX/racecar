@@ -383,7 +383,7 @@ class TestRosNodeSmoke(unittest.TestCase):
             node._on_control()
             self.clock.advance(0.02)
         self.assertIn(node.mission.state,
-                      ("ANNOUNCE", "GO_STRONGHOLD", "HOLD", "CROSS"))
+                      ("ANNOUNCE", "MAPPING", "GO_STRONGHOLD", "HOLD", "CROSS"))
         announce = node._publishers["/crossfire/mission/announce"].messages
         self.assertTrue(announce, "应发布 /mission/announce 播报文本")
         self.assertIn("我将前往路线A", announce[0].data)

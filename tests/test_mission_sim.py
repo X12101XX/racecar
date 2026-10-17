@@ -46,11 +46,12 @@ class TestMissionEndToEnd(unittest.TestCase):
     def test_event_sequence(self):
         res = self._run("A", 3)
         names = [e["event"] for e in res.events]
-        for must in ("init_done", "announce", "stronghold_arrived", "hold_done",
-                     "cross_start", "camp_arrived", "mission_done"):
+        for must in ("init_done", "announce", "mapping_done", "stronghold_arrived",
+                     "hold_done", "cross_start", "camp_arrived", "mission_done"):
             self.assertIn(must, names)
-        # 顺序检查
-        self.assertLess(names.index("announce"), names.index("stronghold_arrived"))
+        # 顺序检查：播报 -> 静止建图 -> 前往据点 -> 停留 -> 穿越
+        self.assertLess(names.index("announce"), names.index("mapping_done"))
+        self.assertLess(names.index("mapping_done"), names.index("stronghold_arrived"))
         self.assertLess(names.index("hold_done"), names.index("cross_start"))
         self.assertLess(names.index("cross_start"), names.index("camp_arrived"))
 
