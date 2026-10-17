@@ -51,7 +51,7 @@ def main(argv=None) -> int:
         from pathlib import Path
         from .world import SimCone
         source=Path(args.config_dir or "config")/"sim_cones.json"
-        configured=[SimCone(float(c["x"]),float(c["y"]),"unknown",radius_base=float(c.get("radius",.115)),radius_lidar=min(.085,float(c.get("radius",.115))*.74)) for c in json.loads(source.read_text())]
+        configured=[SimCone(float(c["x"]),float(c["y"]),str(c.get("color","unknown")),radius_base=float(c.get("radius",.115)),radius_lidar=min(.085,float(c.get("radius",.115))*.74)) for c in json.loads(source.read_text())]
     res = run_mission(cfgs, cfg, cones=configured if args.scenario=="configured" else demo_cones() if args.scenario=="demo" else None)
     print(json.dumps(res.summary, ensure_ascii=False, indent=2))
     print(f"[sim] 仿真耗时 {res.wall_time_s:.1f}s；产物目录：{res.outdir}")

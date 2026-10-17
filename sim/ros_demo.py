@@ -53,7 +53,7 @@ class WorldNode(Node):
         if args.scenario=='configured':
             from .world import SimCone
             source=Path(args.config_dir or default_config_dir())/'sim_cones.json'
-            configured=[SimCone(float(c['x']),float(c['y']),'unknown',radius_base=float(c.get('radius',.115)),radius_lidar=min(.085,float(c.get('radius',.115))*.74)) for c in json.loads(source.read_text())]
+            configured=[SimCone(float(c['x']),float(c['y']),str(c.get('color','unknown')),radius_base=float(c.get('radius',.115)),radius_lidar=min(.085,float(c.get('radius',.115))*.74)) for c in json.loads(source.read_text())]
         self.world=SimWorld(f,configured if args.scenario=='configured' else demo_cones() if args.scenario=="demo" else generate_cones(f,np.random.default_rng(args.seed)),np.random.default_rng(args.seed),
                             robot=physical)
         is_mono = not (getattr(args, 'use_card', False) or getattr(args, 'color', False))
@@ -73,7 +73,8 @@ class WorldNode(Node):
         self.card_to_show = ('blue' if args.route == 'A' else 'red') if getattr(args, 'use_card', False) else None
         if args.card_color: self.card_to_show=args.card_color
         self.expected_route=('A' if self.card_to_show=='blue' else 'B') if args.use_card else args.route
-        self.renderer=CameraRenderer(f,CameraModel(width=320,height=240),monochrome=is_mono)
+        self.renderer=CameraRenderer(f,CameraModel(width=320,height=240),monochrome=is_mono,
+                                     colored_materials=not args.use_card)
         self.scan=self.create_publisher(LaserScan,'/scan',qos_profile_sensor_data)
         self.imu=self.create_publisher(Imu,'/imu/data',qos_profile_sensor_data)
         self.odom=self.create_publisher(Odometry,'/odom',qos_profile_sensor_data)

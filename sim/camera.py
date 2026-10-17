@@ -40,8 +40,12 @@ class CameraRenderer:
                  mount_xy: Tuple[float, float] = (0.16, 0.0),
                  height_m: float = 0.18,
                  brightness: float = 1.0, noise_sigma: float = 3.0,
-                 blur: bool = True, monochrome: bool = False):
+                 blur: bool = True, monochrome: bool = False,
+                 colored_materials: bool = True):
         self.monochrome = monochrome
+        # Card-recognition runs keep field materials grey; only the held card
+        # is coloured. --color explicitly enables coloured test materials.
+        self.colored_materials = bool(colored_materials)
         self.field = field
         self.cam = cam
         self.mount = mount_xy
@@ -78,12 +82,14 @@ class CameraRenderer:
         polys.append(Poly(self._pad(f.start.cx, f.start.cy, f.start.length, f.start.width, z),
                           COLOR_START, 2))
         for name, zone in f.zones.items():
-            col = (120, 120, 120) if self.monochrome else (COLOR_BLUE if zone.color == "blue" else COLOR_RED)
+            grey = self.monochrome or not self.colored_materials
+            col = (120, 120, 120) if grey else (COLOR_BLUE if zone.color == "blue" else COLOR_RED)
             polys.append(Poly(np.column_stack([zone.corners(),np.full(4,z)]),
                               tuple(int(c * 0.92) for c in col), 2))
             # 营地/据点边上的 A4 卡片（0.21m x 0.297m，平放）
             card = self._pad(zone.cx + 0.62, zone.cy, 0.30, 0.21, z + 0.001)
-            card_col = (120,120,120) if self.monochrome else (COLOR_BLUE_CARD if zone.color == "blue" else COLOR_RED_CARD)
+            card_col = ((120,120,120) if grey else
+                        (COLOR_BLUE_CARD if zone.color == "blue" else COLOR_RED_CARD))
             polys.append(Poly(card, card_col, 2))
         # 锥桶（四棱锥近似圆锥，侧面按光照做明暗）
         for c in cones:
@@ -94,7 +100,17 @@ class CameraRenderer:
             base = np.array([[c.x + r, c.y + r, 0], [c.x - r, c.y + r, 0],
                              [c.x - r, c.y - r, 0], [c.x + r, c.y - r, 0]], float)
             apex = np.array([[c.x, c.y, h]])
-            col = (75,75,75) if self.monochrome else (COLOR_BLUE if c.color == "blue" else COLOR_RED)
+            color = getattr(c, "color", "unknown")
+            if (self.monochrome or not self.colored_materials
+                    or color not in ("blue", "red")):
+                # Online-competition cones are grey/unknown.  Never turn an
+                # unlabelled cone red: that made every configured obstacle
+                # look like a red mine in colour/card mode.
+                col = (118, 118, 118)
+            elif color == "blue":
+                col = COLOR_BLUE
+            else:
+                col = COLOR_RED
             for k in range(4):
                 p0, p1 = base[k], base[(k + 1) % 4]
                 shade = 1.0 + 0.12 * math.cos(k * math.pi / 2.0 + 0.4)

@@ -39,6 +39,8 @@
   },
   "mission": {
     "hold_seconds": 3.0,
+    "mapping_seconds": 2.0,
+    "mapping_min_scans": 5,
     "zone_tolerance_m": 0.32,
     "zone_confirm_frames": 2,
     "center_tolerance_m": 0.25,

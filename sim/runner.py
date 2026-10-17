@@ -150,7 +150,8 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
                               brightness=0.85 + 0.3 * quality,
                               noise_sigma=3.0 / max(quality, 0.2),
                               blur=quality < 0.95,
-                              monochrome=is_mono)
+                              monochrome=is_mono,
+                              colored_materials=not cfg.use_card)
     # The monochrome mission does not read camera frames. Only synthesize them
     # when vision needs them or when a video is requested, instead of burning
     # CPU on unused 15 Hz images.
@@ -378,7 +379,9 @@ def draw_map(field: Field, cones: Sequence[SimCone], mission: Optional[Mission] 
     for c in cones:
         x, y = W2P([c.x, c.y])
         r = 0.115 * px_per_m
-        col = (70, 130, 255) if c.color == "blue" else (240, 70, 60)
+        color = getattr(c, "color", "unknown")
+        col = ((70, 130, 255) if color == "blue" else
+               (240, 70, 60) if color == "red" else (150, 158, 165))
         if getattr(c, "hit", False):
             d.ellipse([x - r, y - r, x + r, y + r], outline=(255, 220, 0), width=2)
         else:

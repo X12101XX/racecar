@@ -33,6 +33,29 @@ class TestCameraHeading(unittest.TestCase):
         behind=SimpleNamespace(x=1.5,y=2.,radius_base=.115)
         np.testing.assert_array_equal(self.renderer.render([behind],pose),self.renderer.render([],pose))
 
+    def test_unknown_cone_stays_grey_in_color_mode(self):
+        renderer=CameraRenderer(self.field,self.cam,noise_sigma=0,blur=False,monochrome=False)
+        pose=(3.,2.,0.)
+        cone=SimpleNamespace(x=4.2,y=2.,radius_base=.115,height=.4,color='unknown')
+        base=renderer.render([],pose);image=renderer.render([cone],pose)
+        changed=np.any(image!=base,axis=2)
+        self.assertGreater(int(changed.sum()),20)
+        pixels=image[changed].astype(float)
+        self.assertLess(abs(pixels[:,0].mean()-pixels[:,1].mean()),12.)
+        self.assertLess(abs(pixels[:,0].mean()-pixels[:,2].mean()),12.)
+
+    def test_card_mode_keeps_field_materials_grey(self):
+        renderer=CameraRenderer(self.field,self.cam,noise_sigma=0,blur=False,
+                                monochrome=False,colored_materials=False)
+        pose=(3.,2.,0.)
+        cone=SimpleNamespace(x=4.2,y=2.,radius_base=.115,height=.4,color='blue')
+        base=renderer.render([],pose);image=renderer.render([cone],pose)
+        changed=np.any(image!=base,axis=2)
+        self.assertGreater(int(changed.sum()),20)
+        pixels=image[changed].astype(float)
+        self.assertLess(abs(pixels[:,0].mean()-pixels[:,1].mean()),12.)
+        self.assertLess(abs(pixels[:,0].mean()-pixels[:,2].mean()),12.)
+
     def test_projected_ground_matches_distance_model(self):
         mount=np.array([3.16,2.,.18]);pitch=math.radians(self.cam.pitch_deg)
         points=np.array([[3.16+distance,2.,0.] for distance in (.5,1.,2.,4.)])
