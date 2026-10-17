@@ -185,6 +185,11 @@ class AckermannMission(Mission):
         self.metrics['drive_model'] = 'ackermann'
         self.metrics['monochrome'] = bool(self.cfg.monochrome)
         self.metrics['use_card'] = bool(self.cfg.use_card)
+        try:
+            from .native_planner import is_native_available
+            self.metrics['planner_engine'] = 'cpp_native' if is_native_available() else 'python_fallback'
+        except Exception:
+            self.metrics['planner_engine'] = 'python_fallback'
         if hasattr(self.vision, "backend_name"):
             self.metrics['ai_backend'] = self.vision.backend_name
         self.metrics['motion_strategy'] = 'forward_first_bounded_reverse'
@@ -300,7 +305,8 @@ class AckermannMission(Mission):
             self._select_segment()
             if not self._segment:
                 return 0., 0.
-            self.log('path_planned', n=len(path), mode='hybrid_astar')
+            engine_name = self.metrics.get('planner_engine', 'cpp_native')
+            self.log('path_planned', n=len(path), mode='hybrid_astar', engine=engine_name)
         arr = np.asarray(self._segment)
         stop = min(len(arr), self._next_index + 30)
         nearest = self._next_index + int(np.argmin(np.linalg.norm(arr[self._next_index:stop, :2]-pose[:2],axis=1)))
