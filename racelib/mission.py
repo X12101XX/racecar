@@ -276,8 +276,8 @@ class Mission:
             self._last_scan_t = scan.t
             self._scan_count += 1
             self._last_scan = scan
-            dets = extract_cones(scan.points_body())
             pose = self.pose()
+            dets = extract_cones(scan.points_body(), field=self.field, pose=pose)
             self.cones.update(dets, pose, scan.t)
             near = self.cones.nearest_distance(pose)
             self.estimator.update_walls(scan, near)

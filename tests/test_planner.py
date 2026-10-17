@@ -54,6 +54,14 @@ class TestLidar(unittest.TestCase):
         self.assertEqual(len(clusters), 2)
         self.assertEqual([len(c) for c in clusters], [3, 3])
 
+    def test_dense_line_is_sampled_as_obstacles(self):
+        # Overlapping/dense drawn cones form one continuous LiDAR cluster.
+        pts = np.stack([np.full(80, 2.0), np.linspace(-0.6, 0.6, 80)], axis=1)
+        dets = extract_cones(pts)
+        self.assertGreaterEqual(len(dets), 4)
+        self.assertTrue(all(1.8 < d.x < 2.2 for d in dets))
+        self.assertTrue(all(-0.7 < d.y < 0.7 for d in dets))
+
 
 class TestMapAndPlanner(unittest.TestCase):
     def setUp(self):

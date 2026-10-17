@@ -93,20 +93,73 @@ class ConeDetection:
     frame: str = "body"      # body / world
 
 
+def _cluster_length(p: np.ndarray) -> float:
+    if len(p) < 2:
+        return 0.0
+    return float(np.linalg.norm(np.diff(p, axis=0), axis=1).sum())
+
+
+def _sample_long_cluster(p: np.ndarray, spacing: float = 0.22,
+                         radius: float = 0.115, range_min: float = 0.25,
+                         field=None, pose=None) -> List[ConeDetection]:
+    """Approximate a merged row of obstacles as a chain of circle detections.
+
+    Overlapping/dense cones, or a low wall, form one continuous LiDAR cluster
+    that cannot be fitted as a single circle.  The planner needs every metre of
+    that cluster represented, so sample the cluster centreline at a spacing
+    that is still continuous after the planner's inflation margin.
+    """
+    if len(p) < 2:
+        return []
+    lengths = np.linalg.norm(np.diff(p, axis=0), axis=1)
+    cumulative = np.concatenate([[0.0], np.cumsum(lengths)])
+    total = float(cumulative[-1])
+    if total < 0.5:
+        return []
+    targets = np.arange(spacing * 0.5, total, spacing)
+    out: List[ConeDetection] = []
+    for target in targets:
+        i = int(np.searchsorted(cumulative, target))
+        i = max(0, min(i, len(p) - 1))
+        q = p[i]
+        if float(np.linalg.norm(q)) < range_min:
+            continue
+        if field is not None and pose is not None:
+            world = G.body_to_world(pose, q)
+            if field.wall_clearance(world) < 0.25:
+                continue  # perimeter/fence returns are already a known wall
+        out.append(ConeDetection(float(q[0]), float(q[1]), radius,
+                                 int(len(p)), 0.0))
+    return out
+
+
 def extract_cones(pts: np.ndarray, r_min: float = 0.02, r_max: float = 0.30,
                   max_rms: float = 0.035, max_points: int = 90,
                   range_min: float = 0.25, min_points: int = 4,
                   max_center_offset: float = 3.2,
-                  min_axis_ratio: float = 0.18) -> List[ConeDetection]:
+                  min_axis_ratio: float = 0.18,
+                  field=None, pose=None) -> List[ConeDetection]:
     """从点云中提取锥桶：形状近似圆、半径合理、拟合残差小、几何自洽。
 
     额外的几何自洽检查用于剔除"墙角"这类假目标：拟合圆心必须靠近点簇质心。
     （注意：近距离锥桶的可见弧约为前半圈 ~180 度，不能用张角来过滤。）
+
+    连续的长点簇（密集/重叠锥桶或低墙）不能按单圆拟合，改为沿点簇中心线
+    采样成串的圆形障碍，避免"雷达看到了但规划地图为空"。
     """
     out: List[ConeDetection] = []
     for idx in cluster_points(pts):
         p = pts[idx]
-        if len(p) > max_points or len(p) < min_points:
+        if len(p) < min_points:
+            continue
+        # Only approximate genuinely long merged clusters.  A short cluster
+        # near the car may be a single cone or a normal wall return; filling it
+        # with samples would create false obstacles in a valid gap.
+        if _cluster_length(p) >= 1.0:
+            out.extend(_sample_long_cluster(p, range_min=range_min,
+                                            field=field, pose=pose))
+            continue
+        if len(p) > max_points:
             continue
         if float(np.linalg.norm(p.mean(axis=0))) < range_min:
             continue
