@@ -20,7 +20,10 @@ release/*.tar.gz
 release/*.run
 *.run
 *crossfire-sim-*.tar.gz
-tmp/release-stage/
+
+# 临时目录（保留 .gitkeep，忽略生成内容）
+tmp/*
+!tmp/.gitkeep
 
 # 编辑器与操作系统临时文件
 .vscode/
@@ -29,6 +32,7 @@ tmp/release-stage/
 *.swo
 *~
 .DS_Store
+.delta/
 
 # 工具/助手生成的空目录
 .agents/
