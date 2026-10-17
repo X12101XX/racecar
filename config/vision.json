@@ -1,0 +1,28 @@
+{
+  "camera": {
+    "width": 640,
+    "height": 480,
+    "hfov_deg": 90.0,
+    "pitch_deg": -12.0,
+    "height_m": 0.18,
+    "note": "pitch 向下为负；height_m 是镜头光心离地高度，用于地面距离估计"
+  },
+  "hsv": {
+    "blue": {"ranges": [[[95, 80, 50], [130, 255, 255]]]},
+    "red": {"ranges": [[[0, 80, 50], [10, 255, 255]], [[170, 80, 50], [179, 255, 255]]]},
+    "note": "OpenCV HSV：H 0~179，S/V 0~255。现场光照下用 tools/tune_hsv.py 标定"
+  },
+  "morph": {"open_px": 3, "close_px": 3},
+  "cone": {
+    "min_area_px": 60,
+    "height_m": 0.40,
+    "max_distance_m": 4.0
+  },
+  "card": {
+    "min_area_ratio": 0.015
+  },
+  "floor_patch": {
+    "min_area_ratio": 0.08,
+    "bottom_band_ratio": 0.30
+  }
+}

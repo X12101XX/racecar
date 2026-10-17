@@ -1,0 +1,36 @@
+# Python 缓存与中间产物
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# ROS 2 工作空间中间产物
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
+ros2_ws/src/racelib/racelib/
+
+# 仿真运行输出与隔离运行时
+output/
+.runtime/
+
+# 打包发布产物与大体积归档文件（可通过 tools/package_release.py 重新生成）
+release/*.tar.gz
+release/*.run
+*.run
+*crossfire-sim-*.tar.gz
+tmp/release-stage/
+
+# 编辑器与操作系统临时文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 工具/助手生成的空目录
+.agents/
+.aws/
+.codex/

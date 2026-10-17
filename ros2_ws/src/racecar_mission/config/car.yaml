@@ -1,0 +1,19 @@
+# 穿越火线任务节点参数（可被任务启动文件覆盖）
+racecar_mission:
+  ros__parameters:
+    route: "A"                 # A=蓝卡路线(据点A->营地A)  B=红卡路线
+    use_card: false            # 线上赛不抽色卡：false；线下抽色卡：true
+    publish_cmd: false          # false = 空转调试，不发布速度指令
+    frame_id: "map"            # RViz 显示坐标系（小车常用 map / odom）
+    tts: "auto"                # auto/espeak-ng 播报；none 只显示不发声
+    control_rate_hz: 50.0
+    diagnostics_rate_hz: 2.0
+    publish_markers: true
+    config_dir: ""             # 留空使用包内 config（field/robot/vision/plan/route_*）
+    topics:
+      scan: "/scan"            # LSX10 雷达
+      image: "/usb_cam/image_raw"
+      image_compressed: ""
+      imu: "/imu/data"
+      odom: "/odom"
+      cmd_vel: "/crossfire/desired_cmd"

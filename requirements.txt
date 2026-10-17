@@ -1,0 +1,11 @@
+# 本地跑仿真需要的（本机是 Python 3 环境）
+numpy>=1.24
+pillow>=10.0
+# 可选：装了 scipy 时图像形态学/距离变换会更快（没有会自动退化为纯 numpy 实现）
+scipy>=1.10
+# 可选：只用于"把帧合成 mp4"；没有 ffmpeg 时会保留 PNG 帧但不生成视频
+#   Arch:  sudo pacman -S ffmpeg
+#   Ubuntu: sudo apt install ffmpeg
+#
+# 小车端（ROS2 Humble 镜像通常已自带）
+#   OpenCV：python3-opencv 或 opencv-python —— 车上走 cv2 后端

@@ -1,0 +1,22 @@
+{
+  "ros_distro": "humble",
+  "ros_domain_id": 0,
+  "output_topic": "/car_cmd_vel",
+  "output_mode": "legacy_steering",
+  "scan_topic": "/scan",
+  "imu_topic": "/imu/data",
+  "odom_topic": "/odom",
+  "image_topic": "/usb_cam/image_raw",
+  "wheelbase": 0.30,
+  "max_steer": 0.52,
+  "max_speed": 0.30,
+  "reverse_limit": 0.15,
+  "body_length": 0.42,
+  "body_width": 0.30,
+  "allow_reverse": false,
+  "hardware_watchdog_confirmed": false,
+  "steering_mapping_calibrated": false,
+  "sensor_frames_calibrated": false,
+  "field_and_start_measured": false,
+  "note": "参数是仿真假设。只有前三项话题/驱动接口来源于历史记录，其余必须在车端只读核对和架空标定后填写。所有确认项初始 false；不会自动接管、杀死旧节点或更改原工作空间。"
+}

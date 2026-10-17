@@ -1,0 +1,21 @@
+{
+  "id": "A",
+  "card_color": "blue",
+  "announce": "我将前往路线A，到达据点A并穿越雷区返回营地A。",
+  "stronghold": "stronghold_a",
+  "camp": "camp_a",
+  "cross_entry": {
+    "x": 1.55,
+    "y_hint": 3.25
+  },
+  "cross_exit": {
+    "x": 5.45,
+    "y_hint": 0.75
+  },
+  "corridor_y": [
+    0.0,
+    4.2
+  ],
+  "hold_seconds": 3.0,
+  "note": "蓝卡路线：起点 -> 据点A(左上) -> 停留 3s -> 斜穿雷区 -> 营地A(右下)"
+}

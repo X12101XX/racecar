@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "name": "尺寸间距与围栏歪斜示例",
+  "field": {
+    "arena": {
+      "length_m": 7.4,
+      "width_m": 4.2,
+      "wall_height_m": 0.3,
+      "boundary": [
+        [
+          0,
+          0
+        ],
+        [
+          7.4,
+          0.04
+        ],
+        [
+          7.32,
+          4.2
+        ],
+        [
+          0.04,
+          4.16
+        ]
+      ]
+    },
+    "start": {
+      "center": [
+        0.5,
+        2
+      ],
+      "size": [
+        0.9,
+        0.8
+      ],
+      "heading_deg": 0
+    },
+    "zones": {
+      "stronghold_a": {
+        "center": [
+          0.75,
+          3.25
+        ],
+        "size": [
+          1,
+          1
+        ],
+        "color": "blue"
+      },
+      "stronghold_b": {
+        "center": [
+          0.75,
+          0.75
+        ],
+        "size": [
+          1,
+          1
+        ],
+        "color": "red"
+      },
+      "camp_a": {
+        "center": [
+          6.25,
+          0.75
+        ],
+        "size": [
+          1,
+          1
+        ],
+        "color": "blue"
+      },
+      "camp_b": {
+        "center": [
+          6.25,
+          3.25
+        ],
+        "size": [
+          1,
+          1
+        ],
+        "color": "red"
+      }
+    },
+    "minefield": {
+      "x_min": 1.5,
+      "x_max": 5.5,
+      "blockade_lines_x": [
+        2,
+        3.65,
+        5.15
+      ],
+      "line_spacing_m": 1.5,
+      "min_cone_gap_m": 0.4
+    },
+    "prior": {
+      "blue_lines_y": [
+        [],
+        [],
+        []
+      ],
+      "red_mines": []
+    }
+  },
+  "geometry": {
+    "length_m": 0.42,
+    "width_m": 0.3,
+    "wheel_base_m": 0.3
+  },
+  "motion": {
+    "forward_mps": 0.4,
+    "corner_mps": 0.25,
+    "reverse_mps": 0.2,
+    "accel_mps2": 0.6,
+    "brake_mps2": 0.6,
+    "lookahead_m": 0.22,
+    "planning_margin_m": 0.1,
+    "arrival_m": 0.18,
+    "shift_pause_s": 0.35
+  },
+  "cones": [
+    {
+      "x": 2,
+      "y": 0.45,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 2,
+      "y": 1.25,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 3.13,
+      "y": 3.11,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 2.17,
+      "y": 3.7,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 3.65,
+      "y": 0.45,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 3.19,
+      "y": 1.43,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 1.94,
+      "y": 2.08,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 3.26,
+      "y": 3.77,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 5.2,
+      "y": 1.1,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 4.77,
+      "y": 2.16,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 4.73,
+      "y": 3.01,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 4.1,
+      "y": 3.47,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 2.7,
+      "y": 0.8,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 2.9,
+      "y": 2.1,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 4.23,
+      "y": 1.43,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 3.87,
+      "y": 2.43,
+      "radius": 0.115,
+      "known": false
+    },
+    {
+      "x": 4.45,
+      "y": 0.53,
+      "radius": 0.115,
+      "known": false
+    }
+  ],
+  "routes": {
+    "A": {
+      "stronghold": "stronghold_a",
+      "camp": "camp_a"
+    },
+    "B": {
+      "stronghold": "stronghold_b",
+      "camp": "camp_b"
+    }
+  }
+}
