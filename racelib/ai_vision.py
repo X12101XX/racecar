@@ -1,17 +1,7 @@
-"""AI 与硬件加速视觉推理模块（支持华为昇腾 NPU、GPU / ONNXRuntime、OpenCV DNN 与向量化加速后端）。
+"""Color-card inference with explicit backends and CPU geometry/color helpers.
 
-分层分工架构：
-  1. NPU / GPU / 硬件加速引擎：执行轻量神经网络推理与高速颜色特征判断（色卡识别、红蓝锥桶分类、地面色块检测）。
-  2. CPU 核心算法（racelib）：接收视觉标注，与激光雷达高精度点云融合，完成正交墙面定位与 Hybrid A* 阿克曼路径规划。
-  3. 独立安全网关（gateway）：独立看门狗进程，不受视觉掉帧或模型异常影响，基于雷达实时扫掠、硬超时与急停守护小车安全。
-
-支持的推理后端：
-  - "npu" / "cann"：华为昇腾 Atlas 200I DK A2 (Ascend 310B NPU)，走 pyACL / acllite 加速 (.om 模型)
-  - "onnx" / "gpu"：ONNX Runtime (CUDA / TensorRT / Ascend EP / CPU fallback)
-  - "cv_dnn"：OpenCV DNN (支持 CUDA 加速后端)
-  - "fast_color"：高度优化的向量化与快速色彩空间加速引擎（零外部依赖，毫秒级响应）
+Only the card classifier is accelerated; cone positions still come from lidar.
 """
-
 from __future__ import annotations
 
 import math
@@ -65,81 +55,82 @@ class BaseAIBackend:
 # =========================================================================== #
 # 后端 1: 华为昇腾 NPU / CANN 后端 (Atlas 200I DK A2)
 # =========================================================================== #
+def card_tensor(img_rgb):
+    """Contract: centre 70% ROI, RGB float32 [0,1], NCHW 1x3x224x224."""
+    h,w=img_rgb.shape[:2]
+    y0,y1=int(h*.15),int(h*.85);x0,x1=int(w*.15),int(w*.85)
+    roi=img_rgb[y0:y1,x0:x1]
+    if not roi.size: raise ValueError('empty image')
+    # Fixed nearest sampling also works without OpenCV on the target.
+    yy=np.minimum((np.arange(224)*roi.shape[0]/224).astype(int),roi.shape[0]-1)
+    xx=np.minimum((np.arange(224)*roi.shape[1]/224).astype(int),roi.shape[1]-1)
+    tensor=np.ascontiguousarray(roi[yy[:,None],xx].transpose(2,0,1)[None],dtype=np.float32)/255.
+    return tensor,(float(x0),float(y0),float(x1),float(y1))
+
+
+def decode_card(outputs,bbox):
+    scores=np.asarray(outputs[0],dtype=float)
+    if scores.shape not in ((1,3),(3,)) or not np.isfinite(scores).all():
+        raise ValueError('card model must output finite scores [1,3]: background, blue, red; YOLO is not supported')
+    scores=scores.reshape(3)
+    idx=int(np.argmax(scores))
+    if idx==0 or scores[idx]<.8: return AICardDetection(None,0.)
+    color='blue' if idx==1 else 'red'
+    return AICardDetection(color,float(min(1.,scores[idx])),bbox,'A' if idx==1 else 'B')
+
+
 class AscendNPUBackend(BaseAIBackend):
-    """华为昇腾 NPU 推理后端（基于 CANN pyACL / acllite）。"""
-
-    name = "ascend_npu"
-
-    def __init__(self, model_path: str = ""):
-        self.model_path = model_path
-        self._acl_initialized = False
-        self._model_loaded = False
-        self._check_and_init()
-
-    def _check_and_init(self) -> None:
+    """ACLLite card classifier adapter; actual board/CANN compatibility is unverified."""
+    name='ascend_npu'
+    def __init__(self,model_path=''):
+        self.model=None;self.error='';self.providers=['Ascend ACLLite']
         try:
-            import acl  # type: ignore # 检查昇腾 pyACL 运行环境
-            self.acl = acl
-            if self.model_path and os.path.isfile(self.model_path):
-                # 如果存在 .om 离线模型，初始化上下文
-                # 板端完整加载逻辑在运行时通过 pyACL 执行
-                self._model_loaded = True
-            self._acl_initialized = True
-        except Exception:
-            self._acl_initialized = False
+            if not model_path or not os.path.isfile(model_path): raise ValueError('missing .om model_path')
+            import acl
+            from acllite_resource import AclLiteResource
+            from acllite_model import AclLiteModel
+            self.resource=AclLiteResource();self.resource.init()
+            self.model=AclLiteModel(model_path)
+            desc=self.model._model_desc
+            dims,ret=acl.mdl.get_input_dims(desc,0)
+            if (ret or acl.mdl.get_num_inputs(desc)!=1 or acl.mdl.get_num_outputs(desc)!=1
+                or tuple(dims.get('dims',[]))!=(1,3,224,224) or acl.mdl.get_input_data_type(desc,0)!=0
+                or acl.mdl.get_input_size_by_index(desc,0)!=1*3*224*224*4
+                or acl.mdl.get_output_size_by_index(desc,0)!=3*4
+                or acl.mdl.get_output_data_type(desc,0)!=0):
+                raise ValueError('NPU model must be float32 RGB NCHW [1,3,224,224] -> scores [1,3]')
+            decode_card(self.model.execute([np.zeros((1,3,224,224),np.float32)]),(0,0,224,224))
+        except Exception as exc:
+            self.error=str(exc);self.model=None
+    def is_available(self): return self.model is not None
+    def detect_card(self,img_rgb):
+        tensor,bbox=card_tensor(img_rgb)
+        return decode_card(self.model.execute([tensor]),bbox)
 
-    def is_available(self) -> bool:
-        return self._acl_initialized and self._model_loaded
 
-    def detect_card(self, img_rgb: np.ndarray) -> AICardDetection:
-        # 板端 .om 模型推理桩（有模型时走 pyACL 执行张量推理，无模型时安全退化）
-        return AICardDetection(None, 0.0, None, None)
-
-    def detect_cones(self, img_rgb: np.ndarray, row_offset: int = 0) -> List[AIConeDetection]:
-        return []
-
-    def detect_floor_patch(self, img_rgb: np.ndarray) -> Tuple[float, float]:
-        return 0.0, 0.0
-
-
-# =========================================================================== #
-# 后端 2: ONNX Runtime 硬件加速后端 (GPU / CUDA / TensorRT / CPU)
-# =========================================================================== #
 class ONNXRuntimeBackend(BaseAIBackend):
-    """ONNX Runtime 硬件加速后端（支持 NVIDIA GPU CUDA / TensorRT / CPU）。"""
-
-    name = "onnxruntime"
-
-    def __init__(self, model_path: str = ""):
-        self.model_path = model_path
-        self._session = None
-        self._providers: List[str] = []
-        self._check_and_init()
-
-    def _check_and_init(self) -> None:
+    """Executes the fixed card-classifier contract; reports installed session providers."""
+    name='onnxruntime'
+    def __init__(self,model_path=''):
+        self._session=None;self.providers=[];self.error=''
         try:
-            import onnxruntime as ort  # type: ignore
-            self.ort = ort
-            available = ort.get_available_providers()
-            # 优先选择 GPU 加速执行器
-            preferred = ["CUDAExecutionProvider", "TensorrtExecutionProvider", "CPUExecutionProvider"]
-            self._providers = [p for p in preferred if p in available] or available
-            if self.model_path and os.path.isfile(self.model_path):
-                self._session = ort.InferenceSession(self.model_path, providers=self._providers)
-        except Exception:
-            self._session = None
-
-    def is_available(self) -> bool:
-        return self._session is not None
-
-    def detect_card(self, img_rgb: np.ndarray) -> AICardDetection:
-        return AICardDetection(None, 0.0, None, None)
-
-    def detect_cones(self, img_rgb: np.ndarray, row_offset: int = 0) -> List[AIConeDetection]:
-        return []
-
-    def detect_floor_patch(self, img_rgb: np.ndarray) -> Tuple[float, float]:
-        return 0.0, 0.0
+            if not model_path or not os.path.isfile(model_path): raise ValueError('missing .onnx model_path')
+            import onnxruntime as ort
+            providers=[p for p in ('CUDAExecutionProvider','CPUExecutionProvider') if p in ort.get_available_providers()]
+            options=ort.SessionOptions();options.intra_op_num_threads=1;options.inter_op_num_threads=1
+            session=ort.InferenceSession(model_path,sess_options=options,providers=providers)
+            ins=session.get_inputs()
+            if len(ins)!=1 or ins[0].shape != [1,3,224,224] or ins[0].type!='tensor(float)':
+                raise ValueError('card input must be float32 [1,3,224,224]')
+            self.input_name=ins[0].name
+            decode_card(session.run(None,{self.input_name:np.zeros((1,3,224,224),np.float32)}),(0,0,224,224))
+            self._session=session;self.providers=session.get_providers()
+        except Exception as exc:
+            self.error=str(exc)
+    def is_available(self): return self._session is not None
+    def detect_card(self,img_rgb):
+        tensor,bbox=card_tensor(img_rgb)
+        return decode_card(self._session.run(None,{self.input_name:tensor}),bbox)
 
 
 # =========================================================================== #
@@ -148,7 +139,7 @@ class ONNXRuntimeBackend(BaseAIBackend):
 class FastVectorizedColorBackend(BaseAIBackend):
     """高效的 SIMD / 向量化并行色彩提取后端。
 
-    无需外部模型依赖，采用快速 ROI 降采样与直接通道向量化比较，单帧延迟 < 3ms。
+    使用 NumPy 的 ROI 降采样和颜色阈值；实际延迟需在运行平台测量。
     """
 
     name = "fast_vectorized"
@@ -282,11 +273,7 @@ class FastVectorizedColorBackend(BaseAIBackend):
 # AI 视觉加速总引擎 (Facade)
 # =========================================================================== #
 class AIVisionEngine:
-    """自适应 AI 视觉加速总引擎。
-
-    自动识别并切换最佳硬件加速后端：
-      昇腾 NPU (CANN) -> ONNXRuntime GPU (CUDA/TensorRT) -> OpenCV DNN -> 高速向量化后端。
-    """
+    """Explicit card inference selection; only auto permits CPU fallback."""
 
     def __init__(self, preferred_backend: str = "auto", model_path: str = ""):
         self.preferred_backend = preferred_backend.lower()
@@ -294,27 +281,26 @@ class AIVisionEngine:
         self._card_history: List[AICardDetection] = []
         self._last_process_time_ms: float = 0.0
 
-    def _select_backend(self, pref: str, model_path: str) -> BaseAIBackend:
-        if pref in ("npu", "cann", "ascend"):
-            npu = AscendNPUBackend(model_path)
-            if npu.is_available():
-                return npu
-        elif pref in ("onnx", "gpu", "cuda"):
-            ort_be = ONNXRuntimeBackend(model_path)
-            if ort_be.is_available():
-                return ort_be
-
-        # 默认 auto 策略：探测硬件加速
-        npu = AscendNPUBackend(model_path)
-        if npu.is_available():
-            return npu
-
-        ort_be = ONNXRuntimeBackend(model_path)
-        if ort_be.is_available():
-            return ort_be
-
-        # 使用向量化高性能内置后端兜底
+    def _select_backend(self,pref,model_path):
+        pref=pref.lower()
+        self.fallback_reason=''
+        if pref in ('fast_color','cpu'): return FastVectorizedColorBackend()
+        if pref not in ('auto','npu','onnx'): raise ValueError('unknown vision backend: '+pref)
+        if pref=='auto' and not model_path:
+            self.fallback_reason='no model configured; using CPU color thresholds'
+            return FastVectorizedColorBackend()
+        cls=AscendNPUBackend if pref=='npu' or (pref=='auto' and model_path.endswith('.om')) else ONNXRuntimeBackend
+        backend=cls(model_path)
+        if backend.is_available(): return backend
+        if pref!='auto': raise RuntimeError(f'{pref} unavailable: {backend.error}')
+        self.fallback_reason=backend.error
         return FastVectorizedColorBackend()
+
+    @property
+    def diagnostics(self):
+        return dict(requested=self.preferred_backend,actual=self.backend_name,
+                    providers=getattr(self.backend,'providers',['CPU/NumPy']),
+                    fallback_reason=self.fallback_reason)
 
     @property
     def backend_name(self) -> str:
@@ -324,28 +310,27 @@ class AIVisionEngine:
         """色卡识别（含时序防抖滤波）。"""
         t0 = time.monotonic()
         det = self.backend.detect_card(img_rgb)
+        if not det.color or det.confidence < .8:
+            self._card_history=[]
+            return AICardDetection(None,0.)
+        if self._card_history and self._card_history[-1].color != det.color:
+            self._card_history=[]
         self._card_history.append(det)
-        if len(self._card_history) > 5:
-            self._card_history.pop(0)
-
-        # 连续 2 帧以上同一颜色则确认
-        colors = [d.color for d in self._card_history if d.color is not None]
-        if colors and colors.count(colors[-1]) >= 2:
-            confirmed_color = colors[-1]
-            route = "A" if confirmed_color == "blue" else "B"
-            det = AICardDetection(confirmed_color, det.confidence, det.bbox, route)
+        self._card_history=self._card_history[-2:]
+        if len(self._card_history)<2:
+            return AICardDetection(None,0.)
 
         self._last_process_time_ms = (time.monotonic() - t0) * 1000.0
         return det
 
     def detect_cones(self, img_rgb: np.ndarray, row_offset: int = 0) -> List[AIConeDetection]:
         t0 = time.monotonic()
-        cones = self.backend.detect_cones(img_rgb, row_offset)
+        cones = FastVectorizedColorBackend().detect_cones(img_rgb, row_offset)
         self._last_process_time_ms = (time.monotonic() - t0) * 1000.0
         return cones
 
     def detect_floor_patch(self, img_rgb: np.ndarray) -> Tuple[float, float]:
-        return self.backend.detect_floor_patch(img_rgb)
+        return FastVectorizedColorBackend().detect_floor_patch(img_rgb)
 
     def benchmark(self, img_rgb: np.ndarray, rounds: int = 20) -> Dict[str, Any]:
         """基准测速：评估当前后端处理延迟与 FPS。"""
@@ -356,7 +341,7 @@ class AIVisionEngine:
         t0 = time.monotonic()
         for _ in range(rounds):
             self.backend.detect_card(img_rgb)
-            self.backend.detect_cones(img_rgb)
+            self.detect_cones(img_rgb)
         total = time.monotonic() - t0
         avg_ms = (total / rounds) * 1000.0
         fps = rounds / max(total, 1e-6)

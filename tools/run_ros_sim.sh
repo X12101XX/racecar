@@ -8,7 +8,8 @@ HAS_CONFIG=false
 HAS_SCENARIO=false
 HAS_OUTDIR=false
 ROUTE=A
-RESULT_DIR=/output/ros_A
+RESULT_DIR=''
+LABEL=ros
 RESULT_ARGS=()
 while (($#)); do
   case "$1" in
@@ -37,8 +38,13 @@ while (($#)); do
   --profile 名称或JSON文件   直接使用界面保存/导出的配置，自动加载其障碍布局
   --route A|B               指定路线（默认 A）
   --motion-preset conservative|standard|aggressive  临时覆盖运动预设
+  --use-card               两帧一致色卡识别选路（蓝 A / 红 B）
+  --color                  手动选路，并启用物料颜色识别
+  --ai-backend auto|fast_color|onnx|npu  显式模型后端缺失时直接报错
+  --ai-model /workspace/models/card.onnx  模型路径（仅色卡分类协议）
+  --planner-engine auto|native|python  规划后端
   --seed 数字               随机种子（默认 3）
-  --outdir /output/目录      输出目录；--profile 默认使用带时间戳的新目录
+  --outdir /output/目录      输出目录；默认每次创建带时间戳的新目录，拒绝覆盖旧结果
   --max-time 秒             仿真最长时间（默认 180）
   --scenario demo|random|configured   高级场景选择（不与 --profile 同用）
   --config-dir 容器内目录    高级运行配置目录（不与 --profile 同用）
@@ -73,13 +79,25 @@ if [[ -n "$PROFILE" ]]; then
   ARGS=(--scenario configured --config-dir "/runtime/${SNAPSHOT##*/}" "${ARGS[@]}")
   LABEL=${PROFILE##*/}; LABEL=${LABEL%.json}; LABEL=${LABEL//[^a-zA-Z0-9_-]/_}; LABEL=${LABEL:0:48}
   RESULT_ARGS=(--profile-name "$LABEL")
-  if ! $HAS_OUTDIR; then
-    RESULT_DIR="/output/${LABEL:0:48}_${ROUTE}_$(date +%Y%m%d-%H%M%S-%N)"
-    ARGS+=(--outdir "$RESULT_DIR")
-    echo "仿真结果：$ROOT/output/${RESULT_DIR#/output/}"
-  fi
   echo "源配置：$SOURCE（已校验并保存独立快照）"
 fi
+if ! $HAS_OUTDIR; then
+  RESULT_DIR="/output/${LABEL}_${ROUTE}_$(date +%Y%m%d-%H%M%S-%N)"
+  ARGS+=(--outdir "$RESULT_DIR")
+fi
+mkdir -p .runtime output
+# The merged ROS install and staging directory are shared: serialize the full run.
+exec 9>.runtime/sim.lock
+flock -n 9 || { echo '另一次仿真仍在运行，请等它结束后重试。' >&2; exit 2; }
+python3 - "$RESULT_DIR" <<'PY_CHECK'
+import pathlib,sys
+p=pathlib.PurePosixPath(sys.argv[1])
+if not str(p).startswith('/output/') or '..' in p.parts or len(p.parts)<3:
+    raise SystemExit('--outdir 必须是 /output/ 下的新目录')
+out=pathlib.Path('output').joinpath(*p.parts[2:])
+if out.exists() or out.is_symlink(): raise SystemExit('拒绝覆盖已有结果目录：'+str(out))
+PY_CHECK
+echo "仿真结果：$ROOT/output/${RESULT_DIR#/output/}"
 python3 tools/sync_workspace.py
 mkdir -p .runtime output
 STARTED_NS=$(python3 -c 'import time; print(time.time_ns())')
@@ -91,9 +109,12 @@ docker run --rm --init --network none --read-only --cap-drop ALL --security-opt 
   --mount "type=bind,src=$ROOT,dst=/workspace,readonly" \
   --mount "type=bind,src=$ROOT/.runtime,dst=/runtime" \
   --mount "type=bind,src=$ROOT/output,dst=/output" \
-  -w /runtime crossfire-sim:humble-v2 bash -c '
+  -w /runtime "${CROSSFIRE_SIM_IMAGE:-crossfire-sim:humble-v2}" bash -c '
     set -e
     source /opt/ros/humble/setup.bash
+    mkdir -p /runtime/native
+    bash /workspace/tools/build_native.sh /runtime/native/libhybrid_astar.so
+    export CROSSFIRE_NATIVE_LIBRARY=/runtime/native/libhybrid_astar.so
     colcon build --merge-install --base-paths /workspace/ros2_ws/src --event-handlers console_direct+
     source /runtime/install/setup.bash
     cd /workspace

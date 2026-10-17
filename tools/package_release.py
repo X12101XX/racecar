@@ -19,8 +19,8 @@ STAGE.mkdir(parents=True)
 car=STAGE/'crossfire-car-v2';car.mkdir()
 
 def copytree(src,dst):
-    shutil.copytree(src,dst,ignore=shutil.ignore_patterns('__pycache__','*.pyc','build','install','log'))
-for name in ('config','racelib','ros2_ws','ui','profiles'):
+    shutil.copytree(src,dst,ignore=shutil.ignore_patterns('__pycache__','*.pyc','*.so','build','install','log'))
+for name in ('config','racelib','ros2_ws','ui','profiles','models'):
     copytree(ROOT/name,car/name)
 (car/'tools').mkdir()
 for name in ('build_car.sh','run_car.sh','car_supervisor.py','sync_workspace.py','profile_config.py','config_editor.py','configure.sh','export_model.py','build_native.sh'):
@@ -29,6 +29,7 @@ for name in ('build_car.sh','run_car.sh','car_supervisor.py','sync_workspace.py'
 shutil.copy2(ROOT/'docs/06_实车适配与标定清单.md',car/'docs/06_实车适配与标定清单.md')
 if (ROOT/'docs/07_NPU与GPU视觉加速指南.md').exists():
     shutil.copy2(ROOT/'docs/07_NPU与GPU视觉加速指南.md',car/'docs/07_NPU与GPU视觉加速指南.md')
+shutil.copy2(ROOT/'docs/08_规划与视觉修复验证.md',car/'docs/08_规划与视觉修复验证.md')
 copytree(ROOT/'docs/evidence',car/'docs/evidence')
 (car/'README.md').write_text('''# 独立实车包 v2
 
@@ -94,29 +95,43 @@ header=header.replace('PAYLOAD_HASH',hashlib.sha256(blob).hexdigest())
 installer=OUT/'crossfire-car-v2.run';installer.write_bytes(header.encode()+blob);installer.chmod(0o755)
 # Full portable simulator source; the Docker image is exported separately for offline reuse.
 sim=STAGE/'crossfire-sim-v2';sim.mkdir()
-for name in ('racelib','sim','ros2_ws','config','tests','tools','containers','ui','profiles'):
+for name in ('racelib','sim','ros2_ws','config','tests','tools','containers','ui','profiles','models'):
     copytree(ROOT/name,sim/name)
 for name in ('README.md','requirements.txt','.dockerignore'):
     shutil.copy2(ROOT/name,sim/name)
 (sim/'docs').mkdir()
-for name in ('01_系统架构与算法.md','02_车辆部署指南.md','03_测试报告.md','05_现场配置与运动调参.md','06_实车适配与标定清单.md','07_NPU与GPU视觉加速指南.md'):
+for name in ('01_系统架构与算法.md','02_车辆部署指南.md','03_测试报告.md','05_现场配置与运动调参.md','06_实车适配与标定清单.md','07_NPU与GPU视觉加速指南.md','08_规划与视觉修复验证.md'):
     if (ROOT/'docs'/name).exists():shutil.copy2(ROOT/'docs'/name,sim/'docs'/name)
 copytree(ROOT/'docs/evidence',sim/'docs/evidence')
 copytree(ROOT/'docs/ros2_humble_msgs',sim/'docs/ros2_humble_msgs')
 (sim/'output').mkdir()
-for name in ('ros_demo_A','ros_demo_B'):
-    if (ROOT/'output'/name).exists():copytree(ROOT/'output'/name,sim/'output'/name)
-# Keep the original logs and fault evidence with the simulator release.
-for name in ('unit-tests-container.log','ros-native.log','safety-unit.log','target-install-test.log','release_validation.json','safety_faults.json','docker-image-identity.txt','config-unit.log','config-full-tests.log','config-native-tests.log','config-install-test.log','config-validation.json','config-editor.jpg','profile-entry-checks.json','profile_entry_ros_A.log','profile-entry-ui.png','result-link-validation.json','current-layout-result-entry.log','forward-camera-unit.log','forward-camera-ros-A.log','forward-camera-ros-B.log','forward-camera-aggressive.log','forward-camera-validation.json','forward-camera-A-mid.png','config-editor-port-check.json'):
-    if (ROOT/'output'/name).exists():shutil.copy2(ROOT/'output'/name,sim/'output'/name)
-for name in ('fault_mission_kill','fault_scan_drop','fault_estop','fault_competing_publisher','release_stress','measured_scene_ros','config_aggressive_final_ros','measured_example_A_20261017-125124-612118949','measured_example_A_20261017-125645-760502791','measured_example_A_20261017-130215-253086520','measured_example_A_20261017-130620-261683344','measured_example_B_20261017-130731-821686682','aggressive_demo_A_20261017-130820-976279578'):
-    if (ROOT/'output'/name).exists():copytree(ROOT/'output'/name,sim/'output'/name)
+# Keep current revision evidence separate from historical validation output.
+evidence=ROOT/'docs/evidence/revision_validation.json'
+if evidence.exists():
+    metadata=json.loads(evidence.read_text())
+    validation=ROOT/metadata['validation_directory']
+    if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
+for name in ('unit-vision-final.log','ros-contract-final.log','planner-benchmark.json','planner-benchmark.log','revision-faults.json','target-install-revision.json'):
+    if (ROOT/'output'/name).exists(): shutil.copy2(ROOT/'output'/name,sim/'output'/name)
 archive(sim,OUT/'crossfire-sim-v2.tar.gz')
 def file_hash(p):
     h=hashlib.sha256()
     with p.open('rb') as f:
         for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
     return h.hexdigest()
+# Refresh artifact digests on every packaging run. Test evidence remains dated:
+# packaging itself does not rerun validation or certify later source changes.
+evidence=ROOT/'docs/evidence/revision_validation.json'
+if evidence.exists():
+    record=json.loads(evidence.read_text())
+    receipt=dict(validation_date=record.get('date'),base_commit=record.get('base_commit'),
+        unit_tests_passed=record['unit_tests']['passed'],native_ros_contract_passed=record['native_ros_contract']['passed'],
+        ros_scenarios_passed=sum(bool(r['passed']) for r in record['runs']),
+        faults_passed=sum(bool(r['passed']) for r in record['faults']),
+        validation_directory=record['validation_directory'],vehicle_tested=False,
+        note='Checks refer to the dated validation report; packaging does not rerun tests.',
+        artifacts={p.name:file_hash(p) for p in sorted(OUT.iterdir()) if p.is_file() and p.suffix in ('.gz','.run')})
+    (OUT/'VALIDATION.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
 files=[p for p in sorted(OUT.iterdir()) if p.is_file() and p.name!='SHA256SUMS']
 (OUT/'SHA256SUMS').write_text(''.join(file_hash(p)+'  '+p.name+'\n' for p in files))
 for p in files:print(p.name,p.stat().st_size)

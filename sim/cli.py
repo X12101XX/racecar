@@ -24,6 +24,10 @@ def main(argv=None) -> int:
     ap.add_argument("--prior", default="none", choices=["none", "blue", "all"],
                     help="是否注入赛前公布的锥桶先验位置")
     ap.add_argument("--use-card", action="store_true", help="启用色卡识别流程")
+    ap.add_argument('--ai-backend',choices=['auto','fast_color','cpu','onnx','npu'],default='')
+    ap.add_argument('--ai-model',default='')
+    ap.add_argument('--planner-engine',choices=['auto','native','python'],default='auto')
+    ap.add_argument('--color',action='store_true')
     ap.add_argument("--outdir", default=None)
     ap.add_argument("--no-video", action="store_true")
     ap.add_argument("--fps", type=float, default=6.0)
@@ -33,6 +37,10 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     cfgs = load_all(config_dir=args.config_dir, route=args.route)
+    os.environ['CROSSFIRE_PLANNER_ENGINE']=args.planner_engine
+    if args.ai_backend: cfgs['vision'].data.setdefault('ai',{})['backend']=args.ai_backend
+    if args.ai_model: cfgs['vision'].data['ai']['model_path']=args.ai_model
+    if args.color: cfgs['plan'].data.setdefault('mission',{})['monochrome']=False
     cfg = RunConfig(route=args.route, seed=args.seed, prior=args.prior,
                     use_card=args.use_card, outdir=args.outdir,
                     video=not args.no_video, video_fps=args.fps,

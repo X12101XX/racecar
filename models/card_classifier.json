@@ -1,0 +1,12 @@
+{
+  "type": "deterministic_rgb_thresholds",
+  "trained": false,
+  "input": "centre 70% ROI, nearest 224x224, RGB float32 NCHW [0,1]",
+  "labels": [
+    "background",
+    "blue",
+    "red"
+  ],
+  "output": "scores [1,3]",
+  "note": "Not YOLO or learned detector; verify thresholds under actual lighting."
+}

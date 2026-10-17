@@ -100,7 +100,7 @@ class VisionResult:
 
 
 class Vision:
-    """视觉感知器：同一实例连续调用，内部无状态（便于分布式部署）。"""
+    """视觉感知器：同一实例连续调用，色卡确认状态必须跨帧保留。"""
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -147,8 +147,7 @@ class Vision:
         """识别贴在镜头前的色卡：优先使用硬件加速引擎，未检出时由 HSV 形状筛选兜底。"""
         if img_rgb is not None and getattr(self, "ai_engine", None) is not None:
             ai_card = self.ai_engine.detect_card(img_rgb)
-            if ai_card.color is not None and ai_card.confidence > 0.4:
-                return ai_card.color, ai_card.confidence, ai_card.bbox
+            return ai_card.color, ai_card.confidence, ai_card.bbox
 
         total = float(hsv.shape[0] * hsv.shape[1])
         best = (None, 0.0, None)
@@ -217,6 +216,7 @@ class Vision:
     # ---------------------------------------------------------------- #
     def process(self, img_rgb: np.ndarray, want_card: bool = True) -> VisionResult:
         h, w = img_rgb.shape[:2]
+        self.cam.width=w;self.cam.height=h
         y0 = 0
         if not want_card and self.crop_lower_ratio > 0.0:
             # 锥桶/地面色块只可能出现在地平线以下，裁掉上半部分省算力

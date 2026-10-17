@@ -18,7 +18,9 @@ def main():
     p.add_argument('--arm',action='store_true',help='明确启用独立安全网关')
     p.add_argument('--use-card',action='store_true',help='启动色卡识别（根据抽取的色卡自动决定路线）')
     p.add_argument('--color',action='store_true',help='启用彩色模式与 AI 硬件加速视觉感知')
-    p.add_argument('--ai-backend',choices=['auto','npu','onnx','fast_color','cpu'],default='auto',help='指定 AI 硬件加速后端')
+    p.add_argument('--ai-backend',choices=['auto','npu','onnx','fast_color','cpu'],default='',help='指定色卡推理后端；缺省使用 vision.json')
+    p.add_argument('--ai-model',type=Path,help='符合色卡分类输入输出协议的模型；相对路径从当前目录解析')
+    p.add_argument('--planner-engine',choices=['auto','native','python'],default='auto')
     p.add_argument('--profile',type=Path)
     p.add_argument('--config-dir',type=Path,help='配置界面导出的目录')
     p.add_argument('--motion-preset',choices=['conservative','standard','aggressive'])
@@ -31,6 +33,17 @@ def main():
     plan_data=json.loads((source/'plan.json').read_text())
     if a.motion_preset:
         plan_data['ackermann']=dict(MOTION_PRESETS[a.motion_preset]);plan_data['control']['cross_speed_mps']=MOTION_PRESETS[a.motion_preset]['forward_mps']
+    is_mono = not (a.use_card or a.color)
+    plan_data.setdefault('mission',{})['monochrome']=is_mono
+    vision_data=json.loads((source/'vision.json').read_text())
+    if a.ai_backend: vision_data.setdefault('ai',{})['backend']=a.ai_backend
+    if a.ai_model: vision_data.setdefault('ai',{})['model_path']=str(a.ai_model.resolve())
+    model=vision_data.get('ai',{}).get('model_path','')
+    if model and not Path(model).is_absolute():
+        vision_data['ai']['model_path']=str((root/model).resolve())
+    if not is_mono:
+        from racelib.ai_vision import AIVisionEngine
+        AIVisionEngine(vision_data.get('ai',{}).get('backend','auto'),vision_data.get('ai',{}).get('model_path',''))
     motion=motion_settings(plan_data)
     errors,_=validate_field(field,robot_data['geometry'])
     if errors:raise SystemExit('; '.join(errors))
@@ -45,7 +58,7 @@ def main():
             raise SystemExit('当前路线规划可能需要倒车。请完成后向测距和底盘倒车验证后显式设置 allow_reverse=true。')
     domain=profile.get('ros_domain_id',0)
     if not isinstance(domain,int) or not 0<=domain<=101:raise SystemExit('非法 ROS_DOMAIN_ID')
-    env=os.environ.copy();env['ROS_DOMAIN_ID']=str(domain);env['ROS_LOCALHOST_ONLY']='1'
+    env=os.environ.copy();env['CROSSFIRE_PLANNER_ENGINE']=a.planner_engine;env['ROS_DOMAIN_ID']=str(domain);env['ROS_LOCALHOST_ONLY']='1'
     run=root/'runs'/time.strftime('%Y%m%d-%H%M%S');run.mkdir(parents=True,exist_ok=False)
     env['ROS_HOME']=str(run/'ros');env['ROS_LOG_DIR']=str(run/'ros/log');env['CROSSFIRE_RUN_DIR']=str(run)
     lock_path=Path.home()/'.local/state/crossfire/mission.lock';lock_path.parent.mkdir(parents=True,exist_ok=True)
@@ -77,7 +90,7 @@ def main():
         import shutil
         cfg_dir=run/'config';shutil.copytree(source,cfg_dir)
         (cfg_dir/'plan.json').write_text(json.dumps(plan_data,ensure_ascii=False,indent=2))
-        is_mono = not (a.use_card or a.color)
+        (cfg_dir/'vision.json').write_text(json.dumps(vision_data,ensure_ascii=False,indent=2))
         specs.append(('mission_node',{**params,'route':a.route,'use_card':a.use_card,'monochrome':is_mono,'ai_backend':a.ai_backend,'publish_cmd':a.arm,'tts':'auto' if a.arm else 'none','config_dir':str(cfg_dir)}))
         for name,values in specs:
             f=(run/f'{name}.log').open('w');files.append(f)

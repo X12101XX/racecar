@@ -1,10 +1,6 @@
-"""C++ 原生硬件级高性能 Hybrid A* 路径规划接口（ctypes 绑定）。
+"""Local C ABI planner. ctypes releases the GIL during native calls.
 
-特性：
-  1. 采用扁平状态哈希表与连续内存拓扑，彻底消除 Python 虚拟机对象分配与垃圾回收开销；
-  2. 原生 C++ 向量化 Minkowski 碰撞检测与 2D Dijkstra 启发式预计算；
-  3. 执行时释放 Python GIL，确保 ROS 2 50Hz 底盘控制与传感器回调零延迟；
-  4. 自动检测编译产物：若动态库存在则极速加速（10x~30x+ 提速），若不存在无缝回退到纯 Python 实现。
+Control scheduling and board latency still require measurement.
 """
 from __future__ import annotations
 
@@ -18,14 +14,19 @@ _LIB: Optional[ctypes.CDLL] = None
 _LIB_SEARCH_PATHS = [
     Path(__file__).resolve().parent / "native" / "libhybrid_astar.so",
     Path(__file__).resolve().parent / "libhybrid_astar.so",
-    Path("/runtime/install/lib/libhybrid_astar.so"),
-    Path("/usr/local/lib/libhybrid_astar.so"),
 ]
+
+if os.environ.get("CROSSFIRE_NATIVE_LIBRARY"):
+    _LIB_SEARCH_PATHS = [Path(os.environ["CROSSFIRE_NATIVE_LIBRARY"])]
 
 for p in _LIB_SEARCH_PATHS:
     if p.is_file():
         try:
-            _LIB = ctypes.CDLL(str(p))
+            candidate = ctypes.CDLL(str(p))
+            candidate.c_planner_abi_version.restype = ctypes.c_int
+            if candidate.c_planner_abi_version() != 2:
+                continue
+            _LIB = candidate
             break
         except Exception:
             _LIB = None

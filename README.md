@@ -21,7 +21,7 @@
   - [3. 实车解锁（--arm）前提条件](#3-实车解锁--arm前提条件)
 - [六、 运动预设与配置体系](#六-运动预设与配置体系)
 - [七、 NPU/GPU 视觉加速与双模式切换](#七-npugpu-视觉加速与双模式切换)
-- [八、 CPU 规划算法 C++ 原生硬件级加速](#八-cpu-规划算法-c-原生硬件级加速)
+- [八、 CPU 规划算法 C++ 原生加速](#八-cpu-规划算法-c-原生加速)
 - [九、 核心文档导航](#九-核心文档导航)
 
 ---
@@ -89,7 +89,7 @@ flowchart TD
 
 ```text
 racecar/
-├── racelib/                # 核心算法库（纯 Python，解耦无 ROS 依赖）
+├── racelib/                # 核心算法库（Python + 可选 C++，无 ROS 依赖）
 │   ├── ackermann.py        # 基于自行车模型的 Hybrid A* 混合路径规划与扫掠碰撞检测
 │   ├── localization.py     # 场地墙面正交投影修正定位算法
 │   ├── lidarproc.py        # 激光点云聚类、圆拟合与障碍物提取
@@ -103,8 +103,8 @@ racecar/
 │       ├── racecar_mission/preflight.py      # 只读起飞前硬件与配置自检
 │       └── racecar_mission/calibrate_drive.py# 底盘转向舵机与油门 PWM 标定工具
 ├── sim/                    # 仿真系统
-│   ├── runner.py / cli.py  # 快速算法级仿真器（纯 Python，毫秒级快速迭代）
-│   ├── ros_demo.py         # 真实 ROS 2 DDS 闭环仿真世界（含噪声、延迟与刚体物理）
+│   ├── runner.py / cli.py  # 快速算法级仿真器（算法闭环，可选择 C++/Python 规划）
+│   ├── ros_demo.py         # 真实 ROS 2 DDS 闭环（自行车运动学、传感器噪声与碰撞检查）
 │   └── camera.py           # 视锥投影与相机观测生成
 ├── config/                 # 默认配置
 │   ├── field.json          # 场地外框与区域定义
@@ -112,6 +112,7 @@ racecar/
 │   ├── vehicle_profile.json# 实车专用话题与硬件安全确认项（默认全锁定）
 │   └── route_a.json / route_b.json # A/B 路线航点定义
 ├── profiles/               # 现场实测配置与历史快照（由可视化工具生成）
+├── models/                 # 可复现的 RGB 阈值 ONNX 图及模型说明
 ├── tools/                  # 运维、测试与启动工具脚本
 │   ├── configure.sh        # 一键启动 Web 场地配置界面
 │   ├── run_ros_sim.sh      # 启动 Docker 隔离的 ROS 2 仿真
@@ -155,7 +156,7 @@ bash tools/run_ros_sim.sh --profile measured_example --route A --motion-preset a
 - 产物目录包含 `video.mp4`、`summary.json`、`trajectory.csv`、`events.json` 及各节点独立日志。
 
 ### 3. 快速纯算法仿真（无需 ROS）
-用于调试 Hybrid A* 规划参数或避障策略，毫秒级出图：
+用于调试 Hybrid A* 规划参数或避障策略，生成任务轨迹和报告：
 ```bash
 python3 -m sim.cli --route A --no-video
 python3 -m sim.cli --scenario random --route B --seed 42 --no-video
@@ -232,51 +233,40 @@ bash tools/run_car.sh A --arm
 
 ## 七、 NPU/GPU 视觉加速与双模式切换
 
-为充分发挥小车硬件平台（如**华为昇腾 Atlas 200I DK A2 的 8 TOPS 达芬奇架构 NPU** 或独立 GPU）的算力潜能，系统升级了多后端硬件加速架构（`racelib/ai_vision.py`），同时**完整保留无颜色手动路线模式**。
+默认无颜色模式保持手动选路 A/B，不加载模型。色卡模式要求连续两帧确认，超时停车；所有锥桶均避让。
 
-### 1. 三层异构算力分工
-- **NPU / GPU 层**：运行轻量卷积网络或高速向量化颜色引擎（单帧延迟 $< 6\text{ms}$，达 $170+\text{ FPS}$），负责发车前色卡识别、红蓝锥桶分类与地面色块检测；
-- **CPU 核心层**：接收视觉观测并与高精度激光点云融合，执行正交墙面定位修正与阿克曼 Hybrid A* 混合路径规划；
-- **独立安全网关层**：运行于独立高优先级进程，基于激光雷达实时制动扫掠、硬看门狗与急停锁存坚守物理安全底线。
+```bash
+bash tools/run_ros_sim.sh --route A
+bash tools/run_ros_sim.sh --route B
+bash tools/run_ros_sim.sh --use-card --route A --ai-backend fast_color
+```
 
-### 2. 双模式运行命令对比
+ONNX 和 NPU 现已接通色卡推理调用；显式指定后端但缺模型或运行库会报错。只有 `auto` 允许回退，结果中记录实际后端、执行器和原因。ONNX 已在本机 CPU 验证，昇腾 NPU 与 CUDA 尚未实测。锥桶和地贴颜色仍由 CPU 处理。
 
-| 模式 | 适用场景 | 启动命令 (ROS 2 仿真) | 启动命令 (实车部署) | 行为特征 |
-| :--- | :--- | :--- | :--- | :--- |
-| **模式 A：无颜色手动路线**<br/>*(默认保留)* | 线上赛灰色物料、<br/>纯几何规控验证 | `bash tools/run_ros_sim.sh --route A`<br/>`bash tools/run_ros_sim.sh --route B` | `bash tools/run_car.sh A --arm`<br/>`bash tools/run_car.sh B --arm` | • 不识别色卡，直接执行指定路线<br/>• 所有锥桶统一作为避障目标<br/>• 100% 保持已有成熟验证行为 |
-| **模式 B：AI 硬件加速颜色**<br/>*(线下标准赛题)* | 线下抽签比赛、<br/>色卡发车与红蓝雷区 | `bash tools/run_ros_sim.sh --use-card --route A`<br/>`bash tools/run_ros_sim.sh --use-card --route B` | `bash tools/run_car.sh --use-card --arm` | • 起点出示色卡，自动识别切换路线<br/>• 蓝卡 $\to$ 路线 A，红卡 $\to$ 路线 B 并播报<br/>• 雷区区分红锥地雷，加大安全余量 |
+```bash
+bash tools/prepare_vision.sh  # 依赖留在独立 Docker 镜像
+CROSSFIRE_SIM_IMAGE=crossfire-sim:vision-v2 bash tools/run_ros_sim.sh \
+  --use-card --ai-backend onnx --ai-model /workspace/models/card_classifier.onnx
+```
 
----
+附带的模型是可复现 RGB 阈值图，不是训练好的 CNN；不支持直接挂载 YOLO。协议、实车配置与已知边界见 [视觉加速指南](docs/07_NPU与GPU视觉加速指南.md)。
 
-## 八、 CPU 规划算法 C++ 原生硬件级加速
+## 八、 CPU 规划算法 C++ 原生加速
 
-针对嵌入式平台（如 Atlas 200I DK A2 四核 ARM Cortex-A55）上 Python 解释器在重度循环与复杂图搜索下的性能瓶颈，系统引入了 **C++ 原生 Hybrid A* 规划加速引擎**（`racelib/native/hybrid_astar_core.cpp` 与 `racelib/native_planner.py`）：
+C++ 执行 Hybrid A* 搜索、二维 Dijkstra 启发式与整车矩形扫掠碰撞检查，Python 保留任务、感知、跟踪和安全网关。`ctypes.CDLL` 调用期间释放 GIL；这有助于并行接收传感器，不等于控制循环无抖动。
 
-### 1. 核心加速机制
-1. **扁平化状态哈希拓扑（Zero-Heap Allocation）**：
-   - 彻底摒弃 Python 字典与多维元组分配，采用连续内存的扁平网格索引（`compute_bin_index`），状态查表延迟 $< 1\text{ns}$；
-   - 采用脏索引追踪表（Dirty Bins Tracking），在毫秒级内完成单次规划的状态重置。
-2. **向量化 Minkowski 车体扫掠检测**：
-   - 用 C++ SIMD 友好的 OBB 旋转投影快速剔除远距离障碍物，紧凑判定车体矩形与锥桶圆柱体的 Minkowski 距离；
-3. **C++ 原生 2D Dijkstra 启发式网格**：
-   - 在 C++ 侧以紧凑优先队列（`std::priority_queue`）预计算整场无障碍通行代价网格，比 Python 版本快 30 倍；
-4. **完全释放 Python GIL（Global Interpreter Lock）**：
-   - C++ 原生计算在独立动态库中执行，完全释放 Python GIL，使得 ROS 2 节点的 50Hz 底盘运动控制与传感器接收定时器永不发生卡顿或抖动；
-5. **渐进式起步余量自适应衰减（Progressive Margin Relaxation）**：
-   - 当小车因紧急避障停在密集障碍物边缘（车体与锥桶间隙介于 $0 \sim 0.055\text{m}$ 之间）时，规划器会自动进行 $0.055\text{m} \to 0.01\text{m}$ 渐进余量自适应释放，确保窄道死胡同解困成功率达 100%。
+本次修正了固定尺寸状态表越界别名、节点扩容引用失效、顺逆时针围栏判断及搜索超时。规划余量不会降到执行保护余量以下；弯道扫掠不通过时先按同一制动检查减速，无法执行再停车重规划。每次规划的倒车预算仍受限制，不是整个任务的倒车总量上限。
 
-### 2. 性能实测基准 (Benchmark)
+```bash
+bash tools/build_native.sh
+bash tools/run_ros_sim.sh --route A --planner-engine native
+bash tools/run_ros_sim.sh --route A --planner-engine python
+bash tools/test_in_container.sh python3 -m tools.benchmark_planner
+```
 
-在复杂多锥桶密集雷区场景下的端到端规划耗时实测对比：
+容器内重新编译当前架构的库；实车包只含 C++ 源码，在板上私有目录编译，不捆绑笔记本的 `.so`。`auto` 无原生库时选 Python，显式 `native` 不可用则报错。性能需在目标板测量，旧版 54 倍和板端延迟外推不作为当前保证。
 
-| 引擎版本 | 单次规划平均耗时 | 最小耗时 | 规划节点吞吐率 | 内存分配特性 | 50Hz 控制流畅度 |
-| :--- | :---: | :---: | :---: | :--- | :---: |
-| **纯 Python 实现** | $261.6\text{ ms}$ | $260.7\text{ ms}$ | $\approx 3.8\text{k 节点/秒}$ | 频繁创建/销毁元组与堆对象 | 偶发掉帧抖动 |
-| **C++ 原生加速引擎** | **$4.8\text{ ms}$** | **$4.4\text{ ms}$** | **$\approx 210\text{k 节点/秒}$** | **连续内存预分配，零 GC** | **全程 50Hz 丝滑** |
-| **性能加速比** | **54.3x** ⚡ | — | — | — | — |
-
-> [!TIP]
-> 运行一键编译脚本 `bash tools/build_native.sh` 即可重新编译原生库；若当前系统未安装 C++ 编译器，系统将自动平滑降级至纯 Python 实现，保证 100% 跨平台开箱即用。
+每次仿真默认创建新目录；视频成功编码后才从 `video.partial.mp4` 改名并更新 `output/latest`。已有结果目录不会覆盖。复查流程与本次实测见 [迭代验证报告](docs/08_规划与视觉修复验证.md)。
 
 ---
 
@@ -291,4 +281,5 @@ bash tools/run_car.sh A --arm
 | **现场配置与调参** | [05_现场配置与运动调参.md](docs/05_现场配置与运动调参.md) | Web 配置编辑器使用说明、导出规范与预设解析 |
 | **实车适配与标定清单** | [06_实车适配与标定清单.md](docs/06_实车适配与标定清单.md) | 首次上架必填项：底盘通信、外参对齐、舵角/油门映射 |
 | **NPU/GPU 视觉加速指南** | [07_NPU与GPU视觉加速指南.md](docs/07_NPU与GPU视觉加速指南.md) | 昇腾 310B NPU 算力利用、ATC 模型转换 (ONNX $\to$ OM)、三层分工与双模式指引 |
+| **本次规划与视觉修复** | [08_规划与视觉修复验证.md](docs/08_规划与视觉修复验证.md) | 首帧地图、C++、模型推理、视频与独立部署的检查及实测 |
 | **赛题规则与物料规格** | [docs/competition/](docs/competition/) | 原始赛题规则说明、传感器规格说明与现场硬件参考图 |

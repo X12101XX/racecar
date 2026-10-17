@@ -8,4 +8,5 @@ set +u
 source /opt/ros/humble/setup.bash
 source "$ROOT/ros2_ws/install/local_setup.bash"
 set -u
+export CROSSFIRE_NATIVE_LIBRARY="$ROOT/racelib/native/libhybrid_astar.so"
 exec python3 "$ROOT/tools/car_supervisor.py" "$@"

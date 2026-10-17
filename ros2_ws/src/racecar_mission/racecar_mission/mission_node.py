@@ -54,7 +54,7 @@ class MissionNode(Node):
         self.declare_parameter("diagnostics_rate_hz", 2.0)
         self.declare_parameter("publish_markers", True)
         self.declare_parameter("monochrome", True)
-        self.declare_parameter("ai_backend", "auto")
+        self.declare_parameter("ai_backend", "")
         for k in ("scan", "image", "image_compressed", "imu", "odom", "cmd_vel"):
             self.declare_parameter(f"topics.{k}", "")
         self.declare_parameter("overrides_json", "")   # 直接塞 JSON 覆盖任意配置

@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
-# 编译 C++ 原生 Hybrid A* 路径规划加速库
+# Build for the current host/container only. Never install into system paths.
 set -euo pipefail
-
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-cd "$ROOT"
-
-CXX="${CXX:-g++}"
+TARGET=${1:-$ROOT/racelib/native/libhybrid_astar.so}
+CXX=${CXX:-g++}
 if ! command -v "$CXX" >/dev/null 2>&1; then
-    echo "警告：未找到 C++ 编译器 ($CXX)，跳过原生库编译（将使用纯 Python 实现）。" >&2
-    exit 0
+  echo "未找到 $CXX；auto 模式使用 Python，native 模式将报错。" >&2
+  exit 0
 fi
-
-echo "正在使用 $CXX 编译 C++ 原生 Hybrid A* 路径规划加速库..."
-mkdir -p racelib/native
-
-# -O3 最高级别优化，-fPIC 生成位置无关代码，-shared 生成动态链接库
-"$CXX" -O3 -fPIC -shared -std=c++17 racelib/native/hybrid_astar_core.cpp -o racelib/native/libhybrid_astar.so
-
-echo "[OK] 编译完成：$ROOT/racelib/native/libhybrid_astar.so"
-python3 tools/sync_workspace.py
+mkdir -p "$(dirname -- "$TARGET")"
+TEMP=$(mktemp "${TARGET}.XXXXXXXX")
+trap 'rm -f -- "$TEMP"' EXIT
+"$CXX" -O3 -fPIC -shared -std=c++17 "$ROOT/racelib/native/hybrid_astar_core.cpp" -o "$TEMP"
+mv -f -- "$TEMP" "$TARGET"
+echo "[OK] 当前环境 C++ 规划库：$TARGET" >&2
+if [[ $# == 0 ]]; then python3 "$ROOT/tools/sync_workspace.py"; fi

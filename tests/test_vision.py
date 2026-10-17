@@ -56,6 +56,8 @@ class TestVision(unittest.TestCase):
         for color, rgb in (("blue", (20, 60, 200)), ("red", (210, 40, 35))):
             img = make_image()
             img[120:290, 200:320] = rgb
+            first = self.vis.process(img, want_card=True)
+            self.assertIsNone(first.card_color)
             res = self.vis.process(img, want_card=True)
             self.assertEqual(res.card_color, color)
 

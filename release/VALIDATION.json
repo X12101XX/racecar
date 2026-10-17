@@ -1,0 +1,17 @@
+{
+  "validation_date": "2026-10-17",
+  "base_commit": "21857b7",
+  "unit_tests_passed": 90,
+  "native_ros_contract_passed": 4,
+  "ros_scenarios_passed": 8,
+  "faults_passed": 4,
+  "validation_directory": "output/validation_20261017-174854-191718",
+  "vehicle_tested": false,
+  "note": "Checks refer to the dated validation report; packaging does not rerun tests.",
+  "artifacts": {
+    "crossfire-car-v2.run": "9526515ee4e4c1128a9743058b3a68df7d4112942a17619f7c689d605efa03ae",
+    "crossfire-car-v2.tar.gz": "0951e47b26c2f1085bc357fdc19d31117d2ea8f912d1334b592ebd1895cdece0",
+    "crossfire-humble-amd64-image.tar.gz": "d56ff5981ff0516a2610199382e8b659cf7a51741ae931a411ab3c8cbf4caf27",
+    "crossfire-sim-v2.tar.gz": "7911fa01795fac4f3bede091d1193d849a166dbafceb314ea5b3292ce78305b1"
+  }
+}

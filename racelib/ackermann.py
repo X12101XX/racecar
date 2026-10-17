@@ -2,6 +2,7 @@
 The legacy PWM/steering conversion belongs ONLY in the ROS safety gateway.
 """
 from __future__ import annotations
+import os
 import heapq
 import math
 import time
@@ -67,25 +68,38 @@ def hybrid_astar(start, goal, world, wheelbase=.30, steer_limit=.52,
     if not math.isfinite(max_reverse_m) or max_reverse_m < 0:
         raise ValueError('倒车路径长度上限必须为非负有限数')
 
-    # C++ 原生硬件级高性能路径规划加速（提速 30x~50x+，毫秒级响应）
-    try:
-        from .native_planner import c_hybrid_astar, is_native_available
-        if is_native_available():
-            native_res = c_hybrid_astar(
-                start, goal, world, wheelbase, steer_limit,
-                allow_reverse, max_nodes, timeout, max_reverse_m, prefer_forward
-            )
-            if native_res is not None:
-                return native_res
-    except Exception:
-        pass
+    if not world.clear(start):
+        return None
+    engine = planner_engine()
+    if engine == 'cpp_native':
+        from .native_planner import c_hybrid_astar
+        return c_hybrid_astar(start, goal, world, wheelbase, steer_limit, allow_reverse,
+                             max_nodes, timeout, max_reverse_m, prefer_forward)
+    return _python_hybrid_astar(start, goal, world, wheelbase, steer_limit, allow_reverse,
+                               max_nodes, timeout, max_reverse_m, prefer_forward)
+
+
+def planner_engine():
+    from .native_planner import is_native_available
+    requested = os.environ.get('CROSSFIRE_PLANNER_ENGINE', 'auto')
+    if requested not in ('auto','native','python'):
+        raise ValueError('planner engine must be auto, native or python')
+    if requested == 'native' and not is_native_available():
+        raise RuntimeError('C++ planner unavailable; build the native library for this environment')
+    return 'cpp_native' if requested != 'python' and is_native_available() else 'python'
+
+
+def _python_hybrid_astar(start, goal, world, wheelbase, steer_limit,
+                         allow_reverse, max_nodes, timeout, max_reverse_m, prefer_forward):
+    begin = time.monotonic()
     if allow_reverse and prefer_forward:
         started=time.monotonic()
-        forward=hybrid_astar(start,goal,world,wheelbase,steer_limit,False,
+        forward=_python_hybrid_astar(start,goal,world,wheelbase,steer_limit,False,
                              max_nodes,timeout*.6,max_reverse_m,False)
         if forward is not None:return forward
         timeout-=time.monotonic()-started
         if timeout<=0:return None
+        begin=time.monotonic()
     curvature = math.tan(steer_limit) / wheelbase
     step = .22
     reverse_budget=int((max_reverse_m+1e-8)/step)
@@ -119,9 +133,8 @@ def hybrid_astar(start, goal, world, wheelbase=.30, steer_limit=.52,
     nodes = [(tuple(start), 1, -1, 0., 0., 0)]
     best = {key(start, 1, 0): 0.}
     q = [(heuristic(start), 0)]
-    begin = time.monotonic()
     while q and len(nodes) < max_nodes:
-        if len(nodes) % 100 < 10 and time.monotonic() - begin > timeout:
+        if time.monotonic() - begin > timeout:
             return None
         _, idx = heapq.heappop(q)
         p, gear, parent, cost, last_k, reversed_steps = nodes[idx]
@@ -185,19 +198,18 @@ class AckermannMission(Mission):
         self.metrics['drive_model'] = 'ackermann'
         self.metrics['monochrome'] = bool(self.cfg.monochrome)
         self.metrics['use_card'] = bool(self.cfg.use_card)
-        try:
-            from .native_planner import is_native_available
-            self.metrics['planner_engine'] = 'cpp_native' if is_native_available() else 'python_fallback'
-        except Exception:
-            self.metrics['planner_engine'] = 'python_fallback'
+        self.metrics['planner_engine'] = planner_engine()
         if hasattr(self.vision, "backend_name"):
-            self.metrics['ai_backend'] = self.vision.backend_name
+            self.metrics['ai_backend'] = 'disabled' if self.cfg.monochrome else self.vision.backend_name
+            self.metrics['ai_details'] = (dict(requested=cfgs['vision'].get('ai.backend','auto'),
+                actual='disabled',providers=[],fallback_reason='monochrome mode') if self.cfg.monochrome
+                else self.vision.ai_engine.diagnostics)
         self.metrics['motion_strategy'] = 'forward_first_bounded_reverse'
         self.metrics["motion_settings"]=dict(self.motion)
         self.cones.seed_prior(self.io.now())
 
     def _world(self):
-        return CollisionWorld(self.field, self.cones.snapshot(), self.car_len, self.car_wid, .055)
+        return CollisionWorld(self.field, self.cones.snapshot(), self.car_len, self.car_wid, .06)
 
     def _zone_reached(self, zone):
         # Center-only arrival, tighter than the 1m square region.
@@ -276,13 +288,8 @@ class AckermannMission(Mission):
             self._last_goal = np.array(goal)
             plan_world = CollisionWorld(self.field, self.cones.snapshot(), self.car_len, self.car_wid, self.motion["planning_margin_m"])
             if not plan_world.clear(pose):
-                for m in (0.055, 0.04, 0.03, 0.02, 0.01, 0.0):
-                    pw = CollisionWorld(self.field, self.cones.snapshot(), self.car_len, self.car_wid, m)
-                    if pw.clear(pose):
-                        plan_world = pw
-                        break
-                else:
-                    plan_world = world
+                # A smaller tracking reserve is allowed, never below the execution guard.
+                plan_world = world
             if self.async_planning:
                 from concurrent.futures import ThreadPoolExecutor
                 if self._executor is None:self._executor=ThreadPoolExecutor(max_workers=1)
@@ -298,7 +305,12 @@ class AckermannMission(Mission):
             if path is None:
                 self._failed_plans+=1
                 if self._failed_plans>=5:self._fail('无法找到满足车体和转弯半径约束的路径')
-                self.log('plan_failed', mode='hybrid_astar')
+                self.log('plan_failed', mode='hybrid_astar',start=list(pose),goal=list(goal),
+                         start_clear=plan_world.clear(pose),margin=plan_world.margin,obstacles=plan_world._cones)
+                return 0., 0.
+            # A background result may have been computed from an older scan snapshot.
+            if any(not world.clear(p) for p, _ in path):
+                self.log('path_discarded', reason='map_changed')
                 return 0., 0.
             self._failed_plans=0
             self._hybrid_path = path[1:]
@@ -306,7 +318,8 @@ class AckermannMission(Mission):
             if not self._segment:
                 return 0., 0.
             engine_name = self.metrics.get('planner_engine', 'cpp_native')
-            self.log('path_planned', n=len(path), mode='hybrid_astar', engine=engine_name)
+            self.log('path_planned', n=len(path), mode='hybrid_astar', engine=engine_name,
+                     start=list(pose),goal=list(goal),planning_margin_m=plan_world.margin)
         arr = np.asarray(self._segment)
         stop = min(len(arr), self._next_index + 30)
         nearest = self._next_index + int(np.argmin(np.linalg.norm(arr[self._next_index:stop, :2]-pose[:2],axis=1)))
@@ -332,13 +345,21 @@ class AckermannMission(Mission):
             cap = min(cap,self.motion["reverse_mps"])
         cap = min(cap, math.sqrt(max(.0, 2*self.motion["brake_mps2"]*max(0.,remaining-.06))))
         self._speed = min(cap,self._speed + self.motion["accel_mps2"]*dt)
-        v = self._direction * self._speed
-        # Predict actual swept vehicle body, including a conservative braking horizon.
-        horizon = abs(v)*.7 + v*v/(2*self.motion["brake_mps2"]) + .04
-        if not world.edge(pose, self._direction*horizon, k):
+        def safe_at(speed):
+            horizon = speed*.7 + speed*speed/(2*self.motion["brake_mps2"]) + .04
+            return world.edge(pose, self._direction*horizon, k)
+        if not safe_at(self._speed):
+            low, high = 0., self._speed
+            for _ in range(10):
+                mid=(low+high)/2
+                if safe_at(mid): low=mid
+                else: high=mid
+            self._speed=low
+        if self._speed < .025 and not safe_at(.025):
             self._hybrid_path, self._segment, self._speed = None, [], 0.
             self.log('predicted_collision_stop')
             return 0., 0.
+        v = self._direction * self._speed
         self._path = arr[:,:2]  # diagnostics / visualization
         return v, v*k
 

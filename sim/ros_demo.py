@@ -33,7 +33,7 @@ from .camera import CameraRenderer
 class WorldNode(Node):
     def __init__(self,args):
         super().__init__('crossfire_sim_world')
-        self.args=args;self.out=Path(args.outdir);self.out.mkdir(parents=True,exist_ok=True)
+        self.args=args;self.out=Path(args.outdir);self.out.mkdir(parents=True,exist_ok=False)
         self.cfg=load_all(config_dir=args.config_dir,route=args.route)
         if args.motion_preset:
             self.cfg['plan'].data['ackermann']=dict(MOTION_PRESETS[args.motion_preset])
@@ -58,7 +58,18 @@ class WorldNode(Node):
         if not is_mono:
             self.cfg['plan'].data.setdefault('mission', {})['monochrome'] = False
             (self.runtime_config/'plan.json').write_text(json.dumps(self.cfg['plan'].data,ensure_ascii=False,indent=2))
+        if args.ai_model:
+            self.cfg['vision'].data.setdefault('ai',{})['model_path']=args.ai_model
+        if args.ai_backend: self.cfg['vision'].data.setdefault('ai',{})['backend']=args.ai_backend
+        args.ai_backend=self.cfg['vision'].get('ai.backend','auto')
+        (self.runtime_config/'vision.json').write_text(json.dumps(self.cfg['vision'].data,indent=2))
+        # Validate backend/model before starting armed simulation-only nodes.
+        if not is_mono:
+            from racelib.ai_vision import AIVisionEngine
+            AIVisionEngine(args.ai_backend, self.cfg['vision'].get('ai.model_path',''))
         self.card_to_show = ('blue' if args.route == 'A' else 'red') if getattr(args, 'use_card', False) else None
+        if args.card_color: self.card_to_show=args.card_color
+        self.expected_route=('A' if self.card_to_show=='blue' else 'B') if args.use_card else args.route
         self.renderer=CameraRenderer(f,CameraModel(width=320,height=240),monochrome=is_mono)
         self.scan=self.create_publisher(LaserScan,'/scan',qos_profile_sensor_data)
         self.imu=self.create_publisher(Imu,'/imu/data',qos_profile_sensor_data)
@@ -73,7 +84,7 @@ class WorldNode(Node):
         self.gateway=[];self.trajectory=[];self.wall0=time.monotonic();self.last=self.wall0
         self.last_image=0.;self.last_scan=0.;self.done=False;self.camp_truth=False
         self.frames=[];self.last_frame=0.;self.last_echo=0.;self.failure_test=None
-        self.video_proc=subprocess.Popen(['ffmpeg','-y','-loglevel','error','-f','rawvideo','-pix_fmt','rgb24','-s','1200x650','-r','4','-i','-','-an','-vcodec','libx264','-pix_fmt','yuv420p',str(self.out/'video.mp4')],stdin=subprocess.PIPE)
+        self.video_proc=subprocess.Popen(['ffmpeg','-y','-loglevel','error','-f','rawvideo','-pix_fmt','rgb24','-s','1200x650','-r','4','-i','-','-an','-vcodec','libx264','-pix_fmt','yuv420p',str(self.out/'video.partial.mp4')],stdin=subprocess.PIPE)
         self.create_timer(.01,self.tick)
 
     def cmd(self,msg):
@@ -115,7 +126,7 @@ class WorldNode(Node):
         if now-self.last_frame>=.25:
             card_now = self.card_to_show if t < 2.5 else None
             self.save_frame(a if 'a' in locals() else self.renderer.render(self.world.cones,self.world.pose,card_color=card_now));self.last_frame=now
-        camp=self.world.field.zone('camp_a' if self.args.route=='A' else 'camp_b')
+        camp=self.world.field.zone('camp_a' if self.expected_route=='A' else 'camp_b')
         if camp.distance_to_center(self.world.pose)<.25:self.camp_truth=True
         if now-self.last_echo>5:
             print(json.dumps(dict(t=round(t,1),pose=[round(v,2) for v in self.world.pose],state=self.last_state.get('state'),estimate=self.last_state.get('pose'),gate=self.gateway[-1][1] if self.gateway else None,cmd=self.command)),flush=True);self.last_echo=now
@@ -157,7 +168,7 @@ class WorldNode(Node):
             movement='FORWARD' if self.world.v>0 else 'REVERSE'
             arrow(yaw if self.world.v>0 else yaw+math.pi,.75,'#008eb8')
         cam=PI.fromarray(a).resize((600,450));canvas.paste(cam,(590,180))
-        d.text((30,25),f'ROS2 Humble | Route {self.args.route} | MONOCHROME | ACKERMANN',fill='white')
+        d.text((30,25),f'ROS2 Humble | Route {self.expected_route} | {"MONOCHROME" if self.is_mono else "COLOR"} | ACKERMANN',fill='white')
         d.text((30,65),f't={self.world.t:.1f}s  state={self.last_state.get("state","WAITING")}  collisions={len(self.world.contacts)}',fill='white')
         d.text((30,100),f'command SI: v={self.command[0]:.2f} m/s, w={self.command[1]:.2f} rad/s',fill='white')
         d.text((30,135),f'drive={movement} | orange: body front / camera | cyan: travel',fill='white',font=small)
@@ -168,10 +179,17 @@ class WorldNode(Node):
     def finish(self,reason):
         s=self.last_state;done=s.get('state')=='DONE'
         is_mono = getattr(self, 'is_mono', True)
-        summary=dict(route=self.args.route,seed=self.args.seed,transport='real ROS2 Humble DDS',monochrome=is_mono,
-                     use_card=getattr(self.args, 'use_card', False),ai_backend=getattr(self.args, 'ai_backend', 'auto'),
+        from racelib.geometry import rect_corners
+        camp=self.world.field.zone('camp_a' if self.expected_route=='A' else 'camp_b')
+        body_in_camp=all(camp.contains(p) for p in rect_corners(self.world.x,self.world.y,
+            self.world.robot.length,self.world.robot.width,self.world.yaw))
+        selected_route=s.get('metrics',{}).get('route')
+        summary=dict(route=self.expected_route,selected_route=selected_route,
+                     finish_body_in_camp_truth=body_in_camp,
+                     initial_route=self.args.route,seed=self.args.seed,transport='real ROS2 Humble DDS',monochrome=is_mono,
+                     use_card=getattr(self.args, 'use_card', False),ai_backend_requested=self.args.ai_backend,ai_backend=s.get('metrics',{}).get('ai_backend'),
                      drive_model='ackermann',
-                     final_state=s.get('state'),success=done and self.camp_truth and not self.world.contacts and not self.world.wall_contacts,
+                     final_state=s.get('state'),success=done and body_in_camp and selected_route==self.expected_route and abs(self.world.v)<.025 and not self.world.contacts and not self.world.wall_contacts,
                      reached_camp_truth=self.camp_truth,cone_contacts=len(self.world.contacts),wall_contacts=self.world.wall_contacts,
                      sim_time=self.world.t,metrics=s.get('metrics'),received_commands=self.received_cmd,reason=reason)
         forward=reverse=0.
@@ -190,7 +208,10 @@ class WorldNode(Node):
         if self.frames:
             self.frames[-1].save(self.out/'final.png')
         self.video_proc.stdin.close()
-        self.video_proc.wait(timeout=30)
+        code=self.video_proc.wait(timeout=30)
+        if code: raise RuntimeError(f'ffmpeg encoding failed ({code}); partial video retained')
+        (self.out/'video.partial.mp4').replace(self.out/'video.mp4')
+        (self.out/'completed.json').write_text(json.dumps({'video_finalized':True,'reason':reason}))
         return summary
 
 
@@ -208,19 +229,23 @@ def main():
     ap.add_argument('--route',choices=['A','B'],default='A')
     ap.add_argument('--use-card',action='store_true',default=False)
     ap.add_argument('--color',action='store_true',default=False)
-    ap.add_argument('--ai-backend',choices=['auto','npu','onnx','fast_color','cpu'],default='auto')
+    ap.add_argument('--ai-backend',choices=['auto','npu','onnx','fast_color','cpu'],default='')
+    ap.add_argument('--ai-model',default='')
+    ap.add_argument('--card-color',choices=['blue','red'])
+    ap.add_argument('--planner-engine',choices=['auto','native','python'],default='auto')
     ap.add_argument('--seed',type=int,default=3)
-    ap.add_argument('--outdir',default='/output/ros_A')
+    ap.add_argument('--outdir',default='/output/ros_'+time.strftime('%Y%m%d-%H%M%S'))
     ap.add_argument('--max-time',type=float,default=180)
     ap.add_argument('--fault',choices=['none','mission_kill','scan_drop','estop','competing_publisher'],default='none')
     args=ap.parse_args()
+    os.environ['CROSSFIRE_PLANNER_ENGINE']=args.planner_engine
     rclpy.init();node=WorldNode(args);procs=[];logs=[];env=os.environ.copy();env['CROSSFIRE_RUN_DIR']=args.outdir
     try:
         for executable,params in [
             ('gateway',dict(armed=True,hardware_watchdog_confirmed=True,calibration_confirmed=True,output_topic='/crossfire/sim_cmd',output_mode='yaw_rate',allow_reverse=True,wheelbase=node.world.robot.wheelbase,max_steer=node.world.robot.max_steer,body_length=node.world.robot.length,body_width=node.world.robot.width,max_speed=node.motion['forward_mps'],reverse_limit=node.motion['reverse_mps'],brake_decel=node.motion['brake_mps2'])),
             ('mission_node',dict(route=args.route,use_card=args.use_card,monochrome=node.is_mono,ai_backend=args.ai_backend,publish_cmd=True,tts='none',config_dir=str(node.runtime_config),**{'topics.scan':'/scan','topics.imu':'/imu/data','topics.odom':'/odom','topics.image':'/usb_cam/image_raw','topics.cmd_vel':'/crossfire/desired_cmd'}))]:
             log=(node.out/f'{executable}.log').open('w');logs.append(log);procs.append(launch_node(executable,params,log,env))
-        deadline=time.monotonic()+args.max_time+30;fault_start=None;observations=[]
+        deadline=time.monotonic()+args.max_time;fault_start=None;observations=[]
         while not node.done and time.monotonic()<deadline:
             rclpy.spin_once(node,timeout_sec=.01)
             if args.fault!='none' and node.world.t>4 and (fault_start is not None or abs(node.command[0])>.08):
@@ -232,7 +257,7 @@ def main():
                 if time.monotonic()-fault_start>2:break
             if any(p.poll() is not None for i,p in enumerate(procs) if not(args.fault=='mission_kill' and i==1)):
                 raise RuntimeError('ROS2 child exited; inspect logs')
-        result=node.finish('fault_test' if fault_start else 'normal' if node.done else 'timeout')
+        result=node.finish('fault_test' if fault_start else 'mission_done' if node.last_state.get('state')=='DONE' else 'mission_failed' if node.done else 'timeout')
         if fault_start:
             obs=node.failure_test['observations'];zeros=[a[0]-fault_start for a in obs if a[0]>=fault_start and abs(a[1])+abs(a[2])<1e-6]
             late=[a for a in obs if a[0]>fault_start+.65]

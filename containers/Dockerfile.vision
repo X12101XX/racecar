@@ -1,0 +1,5 @@
+# Optional inference dependencies stay entirely inside this image.
+FROM crossfire-sim:humble-v2
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends python3-pip && rm -rf /var/lib/apt/lists/* \
+ && python3 -m pip install --no-cache-dir numpy==1.24.4 onnx==1.17.0 onnxruntime==1.20.1

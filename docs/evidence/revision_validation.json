@@ -1,0 +1,686 @@
+{
+  "date": "2026-10-17",
+  "base_commit": "21857b7",
+  "validation_directory": "output/validation_20261017-174854-191718",
+  "unit_tests": {
+    "passed": 90,
+    "total": 90,
+    "log": "output/unit-vision-final.log"
+  },
+  "native_ros_contract": {
+    "passed": 4,
+    "total": 4,
+    "log": "output/ros-contract-final.log"
+  },
+  "runs": [
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "A",
+        "initial_route": "A",
+        "seed": 3,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": true,
+        "use_card": false,
+        "ai_backend_requested": "auto",
+        "ai_backend": "disabled",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 48.02056615499899,
+        "metrics": {
+          "route": "A",
+          "t_start_line": 2.22,
+          "t_finish": 47.459,
+          "run_time_s": 45.239,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.0,
+          "min_cone_clearance_m": 0.332,
+          "drive_model": "ackermann",
+          "monochrome": true,
+          "use_card": false,
+          "planner_engine": "cpp_native",
+          "ai_backend": "disabled",
+          "ai_details": {
+            "requested": "auto",
+            "actual": "disabled",
+            "providers": [],
+            "fallback_reason": "monochrome mode"
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 2354,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 8.99,
+          "reverse": 0.143
+        }
+      },
+      "expected_route": "A",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "mono_A"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "B",
+        "initial_route": "B",
+        "seed": 3,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": true,
+        "use_card": false,
+        "ai_backend_requested": "auto",
+        "ai_backend": "disabled",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 78.0206233210027,
+        "metrics": {
+          "route": "B",
+          "t_start_line": 2.099,
+          "t_finish": 77.519,
+          "run_time_s": 75.42,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.0,
+          "min_cone_clearance_m": 0.298,
+          "drive_model": "ackermann",
+          "monochrome": true,
+          "use_card": false,
+          "planner_engine": "cpp_native",
+          "ai_backend": "disabled",
+          "ai_details": {
+            "requested": "auto",
+            "actual": "disabled",
+            "providers": [],
+            "fallback_reason": "monochrome mode"
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 3843,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 8.44,
+          "reverse": 0.579
+        }
+      },
+      "expected_route": "B",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "mono_B"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "A",
+        "initial_route": "B",
+        "seed": 3,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": false,
+        "use_card": true,
+        "ai_backend_requested": "onnx",
+        "ai_backend": "onnxruntime",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 56.02055652799672,
+        "metrics": {
+          "route": "A",
+          "t_start_line": 2.513,
+          "t_finish": 55.495,
+          "run_time_s": 52.982,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.0,
+          "min_cone_clearance_m": 0.338,
+          "drive_model": "ackermann",
+          "monochrome": false,
+          "use_card": true,
+          "planner_engine": "cpp_native",
+          "ai_backend": "onnxruntime",
+          "ai_details": {
+            "requested": "onnx",
+            "actual": "onnxruntime",
+            "providers": [
+              "CPUExecutionProvider"
+            ],
+            "fallback_reason": ""
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 2679,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 9.957,
+          "reverse": 1.114
+        }
+      },
+      "expected_route": "A",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "card_A"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "B",
+        "initial_route": "A",
+        "seed": 3,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": false,
+        "use_card": true,
+        "ai_backend_requested": "onnx",
+        "ai_backend": "onnxruntime",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 46.050761990997856,
+        "metrics": {
+          "route": "B",
+          "t_start_line": 2.455,
+          "t_finish": 45.096,
+          "run_time_s": 42.641,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.02,
+          "min_cone_clearance_m": 0.306,
+          "drive_model": "ackermann",
+          "monochrome": false,
+          "use_card": true,
+          "planner_engine": "cpp_native",
+          "ai_backend": "onnxruntime",
+          "ai_details": {
+            "requested": "onnx",
+            "actual": "onnxruntime",
+            "providers": [
+              "CPUExecutionProvider"
+            ],
+            "fallback_reason": ""
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 2239,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 8.315,
+          "reverse": 0.587
+        }
+      },
+      "expected_route": "B",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "card_B"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "A",
+        "initial_route": "A",
+        "seed": 1,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": false,
+        "use_card": true,
+        "ai_backend_requested": "fast_color",
+        "ai_backend": "fast_vectorized",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 45.03049565499898,
+        "metrics": {
+          "route": "A",
+          "t_start_line": 2.503,
+          "t_finish": 44.345,
+          "run_time_s": 41.842,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.0,
+          "min_cone_clearance_m": 0.371,
+          "drive_model": "ackermann",
+          "monochrome": false,
+          "use_card": true,
+          "planner_engine": "cpp_native",
+          "ai_backend": "fast_vectorized",
+          "ai_details": {
+            "requested": "fast_color",
+            "actual": "fast_vectorized",
+            "providers": [
+              "CPU/NumPy"
+            ],
+            "fallback_reason": ""
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 2186,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 9.574,
+          "reverse": 0.143
+        }
+      },
+      "expected_route": "A",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "repeat_card_A"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "B",
+        "initial_route": "B",
+        "seed": 1,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": false,
+        "use_card": true,
+        "ai_backend_requested": "fast_color",
+        "ai_backend": "fast_vectorized",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 61.52076303899681,
+        "metrics": {
+          "route": "B",
+          "t_start_line": 2.46,
+          "t_finish": 60.943,
+          "run_time_s": 58.483,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.002,
+          "min_cone_clearance_m": 0.306,
+          "drive_model": "ackermann",
+          "monochrome": false,
+          "use_card": true,
+          "planner_engine": "cpp_native",
+          "ai_backend": "fast_vectorized",
+          "ai_details": {
+            "requested": "fast_color",
+            "actual": "fast_vectorized",
+            "providers": [
+              "CPU/NumPy"
+            ],
+            "fallback_reason": ""
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 3005,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 9.085,
+          "reverse": 0.726
+        }
+      },
+      "expected_route": "B",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "repeat_card_B"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "A",
+        "selected_route": "A",
+        "finish_body_in_camp_truth": true,
+        "initial_route": "A",
+        "seed": 3,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": true,
+        "use_card": false,
+        "ai_backend_requested": "auto",
+        "ai_backend": "disabled",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 39.02043893100009,
+        "metrics": {
+          "route": "A",
+          "t_start_line": 2.283,
+          "t_finish": 38.279,
+          "run_time_s": 35.996,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.02,
+          "min_cone_clearance_m": 0.327,
+          "drive_model": "ackermann",
+          "monochrome": true,
+          "use_card": false,
+          "planner_engine": "cpp_native",
+          "ai_backend": "disabled",
+          "ai_details": {
+            "requested": "auto",
+            "actual": "disabled",
+            "providers": [],
+            "fallback_reason": "monochrome mode"
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.4,
+            "corner_mps": 0.25,
+            "reverse_mps": 0.2,
+            "accel_mps2": 0.6,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.22,
+            "planning_margin_m": 0.1,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.35
+          }
+        },
+        "received_commands": 1892,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 8.367,
+          "reverse": 0.0
+        }
+      },
+      "expected_route": "A",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "measured_A"
+    },
+    {
+      "final_body_in_camp": true,
+      "exit_code": 0,
+      "summary": {
+        "route": "A",
+        "selected_route": "A",
+        "finish_body_in_camp_truth": true,
+        "initial_route": "A",
+        "seed": 3,
+        "transport": "real ROS2 Humble DDS",
+        "monochrome": true,
+        "use_card": false,
+        "ai_backend_requested": "auto",
+        "ai_backend": "disabled",
+        "drive_model": "ackermann",
+        "final_state": "DONE",
+        "success": true,
+        "reached_camp_truth": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0,
+        "sim_time": 30.03065421400329,
+        "metrics": {
+          "route": "A",
+          "t_start_line": 1.779,
+          "t_finish": 29.521,
+          "run_time_s": 27.742,
+          "blue_contacts": 0,
+          "red_contacts": 0,
+          "penalties_s": 0.0,
+          "announced": true,
+          "stopped_at_finish": true,
+          "hold_actual_s": 3.018,
+          "min_cone_clearance_m": 0.358,
+          "drive_model": "ackermann",
+          "monochrome": true,
+          "use_card": false,
+          "planner_engine": "cpp_native",
+          "ai_backend": "disabled",
+          "ai_details": {
+            "requested": "auto",
+            "actual": "disabled",
+            "providers": [],
+            "fallback_reason": "monochrome mode"
+          },
+          "motion_strategy": "forward_first_bounded_reverse",
+          "motion_settings": {
+            "forward_mps": 0.65,
+            "corner_mps": 0.4,
+            "reverse_mps": 0.25,
+            "accel_mps2": 1.0,
+            "brake_mps2": 0.6,
+            "lookahead_m": 0.3,
+            "planning_margin_m": 0.12,
+            "arrival_m": 0.18,
+            "shift_pause_s": 0.25
+          }
+        },
+        "received_commands": 1414,
+        "reason": "mission_done",
+        "travel_distance_m": {
+          "forward": 9.573,
+          "reverse": 0.147
+        }
+      },
+      "expected_route": "A",
+      "video_decode_ok": true,
+      "video_decode_errors": "",
+      "card_route_ok": true,
+      "passed": true,
+      "case": "aggressive_A"
+    }
+  ],
+  "faults": [
+    {
+      "fault": "mission_kill",
+      "initial_command": [
+        0.25,
+        0.47713485854305704
+      ],
+      "stopped_speed": 1.0435523094355913e-07,
+      "first_zero_s": 0.3023308570009249,
+      "stayed_zero": true,
+      "gateway_faults": [
+        "stale_cmd"
+      ],
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "fault": "scan_drop",
+      "initial_command": [
+        0.25,
+        0.47713485854305704
+      ],
+      "stopped_speed": 2.9663751949619337e-07,
+      "first_zero_s": 0.4371512489997258,
+      "stayed_zero": true,
+      "gateway_faults": [
+        "stale_scan"
+      ],
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "fault": "estop",
+      "initial_command": [
+        0.25,
+        0.47713485854305704
+      ],
+      "stopped_speed": 7.05318117649935e-09,
+      "first_zero_s": 0.0014195030016708188,
+      "stayed_zero": true,
+      "gateway_faults": [
+        "latched_estop"
+      ],
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "fault": "competing_publisher",
+      "initial_command": [
+        0.25,
+        0.47713485854305704
+      ],
+      "stopped_speed": 7.0545869632704155e-09,
+      "first_zero_s": 0.000948058001085883,
+      "stayed_zero": true,
+      "gateway_faults": [
+        "competing_publisher"
+      ],
+      "passed": true,
+      "exit_code": 0
+    }
+  ],
+  "planner_benchmark_ms": {
+    "python": {
+      "mean_ms": 133.771,
+      "min_ms": 132.493,
+      "max_ms": 136.038,
+      "path_points": [
+        151,
+        151,
+        151,
+        151,
+        151
+      ]
+    },
+    "cpp_native": {
+      "mean_ms": 3.452,
+      "min_ms": 3.398,
+      "max_ms": 3.61,
+      "path_points": [
+        151,
+        151,
+        151,
+        151,
+        151
+      ]
+    }
+  },
+  "installation": {
+    "installation_directory": "/tmp/crossfire-install-20261017-175708",
+    "manifest_verified": true,
+    "no_arch_binaries_in_payload": true,
+    "model_present": true,
+    "overwrite_refused": true,
+    "existing_files_unchanged": true,
+    "private_build_passed": true,
+    "uncalibrated_arm_refused": true,
+    "vehicle_executed": false
+  },
+  "limitations": [
+    "No current vehicle connected",
+    "ONNX tested with CPUExecutionProvider",
+    "Ascend NPU/CANN and CUDA hardware unverified",
+    "Finite fixed-scene samples; not a universal completion guarantee"
+  ]
+}

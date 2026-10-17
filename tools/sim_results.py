@@ -27,6 +27,10 @@ def show_result(container_dir, since_ns=0, root=ROOT, profile_name=''):
     if not summary.exists() or summary.stat().st_mtime_ns < since_ns:
         print('本次未生成新的 summary.json；保留原最新结果入口，不能将旧视频视为本次结果。', file=sys.stderr)
         return False
+    partial=result/'video.partial.mp4'
+    if partial.exists():
+        print('视频尚未完成编码；不更新最新结果入口。',file=sys.stderr)
+        return False
     data = json.loads(summary.read_text())
     route = data.get('route')
     if route not in ('A', 'B'):

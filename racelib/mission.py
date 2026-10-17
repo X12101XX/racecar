@@ -95,9 +95,17 @@ class Mission:
         self.cfgs = cfgs
         self.cfg = mission_cfg or MissionConfig.from_config(cfgs["plan"])
         self.field = Field.from_config(cfgs["field"])
-        self.vision = Vision(cfgs["vision"])
+        vision_cfg=cfgs["vision"]
+        if self.cfg.monochrome:
+            import copy
+            vision_cfg=Config(copy.deepcopy(vision_cfg.data))
+            vision_cfg.data['ai']={'backend':'fast_color'}
+        self.vision = Vision(vision_cfg)
         self.cones = ConeMap(self.field, ConeMapConfig())
         self.estimator = PoseEstimator(self.field, PoseEstimatorConfig())
+        # step() polls sensors before its INIT handler. Initialize the map frame now,
+        # otherwise the first scan seeds ghost obstacles around the (0,0,0) origin.
+        self.estimator.set_pose(self.field.start.cx,self.field.start.cy,self.field.start_heading)
         self.grid = GridMap(
             self.field,
             res=float(cfgs["plan"].get("grid.resolution_m", 0.05)),
@@ -583,9 +591,8 @@ class Mission:
             self.state = State.ANNOUNCE
             self.state_t0 = now
         elif (now - self.state_t0) > self.cfg.card_timeout_s:
-            self.log("card_timeout", fallback=self.cfg.route)
-            self.state = State.ANNOUNCE
-            self.state_t0 = now
+            self.log("card_timeout")
+            self._fail("未识别到连续两帧色卡；请检查相机或显式使用手动路线模式")
         return 0.0, 0.0
 
     def _set_route(self, route: str) -> None:
