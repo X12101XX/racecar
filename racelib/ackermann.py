@@ -430,9 +430,26 @@ class AckermannMission(Mission):
             return 0., 0.
         v = self._direction * self._speed
         # Independent of the fused obstacle map, the raw scan is a last-resort
-        # guard for missed/delayed detections and side contacts while turning.
+        # stop for a missed/delayed detection at immediate body contact range.
+        raw = self._raw_body_clearance(v)
+        if math.isfinite(raw) and raw < 0.03:
+            v = 0.0
         self._path = arr[:,:2]  # diagnostics / visualization
         return v, v*k
+
+    def _raw_body_clearance(self, direction: float) -> float:
+        if self._last_scan is None:
+            return math.inf
+        pts = self._last_scan.points_body(0.04, 3.0)
+        if len(pts) == 0:
+            return math.inf
+        pts = pts[pts[:, 0] > -0.05] if direction >= 0 else pts[pts[:, 0] < 0.05]
+        if len(pts) == 0:
+            return math.inf
+        hl, hw = self.car_len / 2.0 + 0.02, self.car_wid / 2.0 + 0.02
+        dx = np.maximum(np.abs(pts[:, 0]) - hl, 0.0)
+        dy = np.maximum(np.abs(pts[:, 1]) - hw, 0.0)
+        return float(np.min(np.hypot(dx, dy)))
 
     def _escape_command(self, world, pose):
         """Short, collision-checked reverse arc out of a map-overlap trap."""

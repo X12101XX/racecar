@@ -3,11 +3,11 @@
   "scope": "local x86_64 CPU in-process simulation with cpp_native planner; no ROS DDS, ARM64 board, NPU or vehicle",
   "base_commit": "0f8f07f",
   "changes": [
-    "adaptive Hybrid A* planning margin: primary reserve, 0.08m, then execution guard 0.06m; every path is rechecked against the execution guard",
+    "adaptive Hybrid A* planning margins: primary reserve, 0.08m, then execution guard 0.06m; every path is rechecked against the execution guard",
     "wall-return rejection margin raised from 0.06m to 0.20m to remove perimeter artifacts from the planning map",
-    "standard motion preset corner speed 0.25 -> 0.22 m/s and lookahead 0.22 -> 0.16 m",
-    "short rear-clearance/swept-footprint checked reverse arc both for start-in-collision and repeated no-path states",
-    "direct-camp planning remains primary (gap waypoints are not forced as intermediate goals)"
+    "standard preset corner speed 0.25 m/s, lookahead 0.18m and shift pause 0.20s to reduce stop/restart cycles",
+    "raw-scan body-clearance emergency stop at 0.03m for a missed/delayed detection",
+    "short rear-clearance/swept-footprint checked reverse arc for start-in-collision and repeated no-path states"
   ],
   "matrix": {
     "command": "python3 -B -m sim.stress --route both --seeds 40 --jobs 8 --max-time 90",
@@ -24,7 +24,7 @@
       "rtf_mean": 20.52
     },
     "optimized": {
-      "report": "output/stress_final80/stress_both_none_20261017-202836.json",
+      "report": "output/stress_final_speed/stress_both_none_20261017-210528.json",
       "runs": 80,
       "success": 67,
       "success_rate": 0.838,
@@ -32,22 +32,8 @@
       "blue_hit_runs": 0,
       "red_hit_runs": 0,
       "wall_contact_runs": 0,
-      "effective_time_mean_s": 48.88,
-      "rtf_mean": 21.07
-    }
-  },
-  "twenty_seed_check": {
-    "baseline": {
-      "report": "output/stress_baseline_20/stress_both_none_20261017-195059.json",
-      "success": 31,
-      "runs": 40,
-      "success_rate": 0.775
-    },
-    "optimized": {
-      "report": "output/stress_standard_new/stress_both_none_20261017-202632.json",
-      "success": 36,
-      "runs": 40,
-      "success_rate": 0.9
+      "effective_time_mean_s": 43.91,
+      "rtf_mean": 20.38
     }
   },
   "regression": {
@@ -55,9 +41,24 @@
     "unit_tests": 113,
     "passed": 112,
     "skipped_optional_onnx": 1,
-    "route_a": {"state": "DONE", "run_time_s": 38.42, "cone_contacts": 0, "wall_contacts": 0},
-    "route_b": {"state": "DONE", "run_time_s": 37.72, "cone_contacts": 0, "wall_contacts": 0},
-    "card_route": {"state": "DONE", "run_time_s": 41.38, "cone_contacts": 0, "wall_contacts": 0},
+    "route_a": {
+      "state": "DONE",
+      "run_time_s": 36.9,
+      "cone_contacts": 0,
+      "wall_contacts": 0
+    },
+    "route_b": {
+      "state": "DONE",
+      "run_time_s": 39.9,
+      "cone_contacts": 0,
+      "wall_contacts": 0
+    },
+    "card_route": {
+      "state": "DONE",
+      "run_time_s": 38.08,
+      "cone_contacts": 0,
+      "wall_contacts": 0
+    },
     "log": "output/unit-tests-local.log"
   },
   "not_verified": [
