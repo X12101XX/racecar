@@ -16,6 +16,9 @@ def main():
     p=argparse.ArgumentParser(description='独立 ROS2 穿越火线任务；默认只读，无底盘发布者')
     p.add_argument('route',choices=['A','B'],nargs='?',default='A')
     p.add_argument('--arm',action='store_true',help='明确启用独立安全网关')
+    p.add_argument('--use-card',action='store_true',help='启动色卡识别（根据抽取的色卡自动决定路线）')
+    p.add_argument('--color',action='store_true',help='启用彩色模式与 AI 硬件加速视觉感知')
+    p.add_argument('--ai-backend',choices=['auto','npu','onnx','fast_color','cpu'],default='auto',help='指定 AI 硬件加速后端')
     p.add_argument('--profile',type=Path)
     p.add_argument('--config-dir',type=Path,help='配置界面导出的目录')
     p.add_argument('--motion-preset',choices=['conservative','standard','aggressive'])
@@ -74,8 +77,8 @@ def main():
         import shutil
         cfg_dir=run/'config';shutil.copytree(source,cfg_dir)
         (cfg_dir/'plan.json').write_text(json.dumps(plan_data,ensure_ascii=False,indent=2))
-        print(f'期望直行上限 {motion["forward_mps"]:.2f} m/s；实车标定上限 {profile["max_speed"]:.2f} m/s；生效取较小值。',flush=True)
-        specs.append(('mission_node',{**params,'route':a.route,'publish_cmd':a.arm,'tts':'none','config_dir':str(cfg_dir)}))
+        is_mono = not (a.use_card or a.color)
+        specs.append(('mission_node',{**params,'route':a.route,'use_card':a.use_card,'monochrome':is_mono,'ai_backend':a.ai_backend,'publish_cmd':a.arm,'tts':'auto' if a.arm else 'none','config_dir':str(cfg_dir)}))
         for name,values in specs:
             f=(run/f'{name}.log').open('w');files.append(f)
             children.append(subprocess.Popen(command(name,values),env=env,stdout=f,stderr=subprocess.STDOUT,start_new_session=True))

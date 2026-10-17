@@ -53,7 +53,13 @@ class WorldNode(Node):
             configured=[SimCone(float(c['x']),float(c['y']),'unknown',radius_base=float(c.get('radius',.115)),radius_lidar=min(.085,float(c.get('radius',.115))*.74)) for c in json.loads(source.read_text())]
         self.world=SimWorld(f,configured if args.scenario=='configured' else demo_cones() if args.scenario=="demo" else generate_cones(f,np.random.default_rng(args.seed)),np.random.default_rng(args.seed),
                             robot=physical)
-        self.renderer=CameraRenderer(f,CameraModel(width=320,height=240),monochrome=True)
+        is_mono = not (getattr(args, 'use_card', False) or getattr(args, 'color', False))
+        self.is_mono = is_mono
+        if not is_mono:
+            self.cfg['plan'].data.setdefault('mission', {})['monochrome'] = False
+            (self.runtime_config/'plan.json').write_text(json.dumps(self.cfg['plan'].data,ensure_ascii=False,indent=2))
+        self.card_to_show = ('blue' if args.route == 'A' else 'red') if getattr(args, 'use_card', False) else None
+        self.renderer=CameraRenderer(f,CameraModel(width=320,height=240),monochrome=is_mono)
         self.scan=self.create_publisher(LaserScan,'/scan',qos_profile_sensor_data)
         self.imu=self.create_publisher(Imu,'/imu/data',qos_profile_sensor_data)
         self.odom=self.create_publisher(Odometry,'/odom',qos_profile_sensor_data)
@@ -103,10 +109,12 @@ class WorldNode(Node):
         m.angular_velocity.z=float(q.yaw_rate);m.linear_acceleration.x=float(q.accel[0]);m.linear_acceleration.y=float(q.accel[1]);m.linear_acceleration.z=float(q.accel[2]);self.imu.publish(m)
         q=self.world.odom_sample(t);m=Odometry();m.header.stamp=stamp;m.header.frame_id='odom';m.child_frame_id='base_link';m.twist.twist.linear.x=float(q.v);m.twist.twist.angular.z=float(q.w);self.odom.publish(m)
         if now-self.last_image>=.2:
-            a=self.renderer.render(self.world.cones,self.world.pose);m=Image();m.header.stamp=stamp;m.height=a.shape[0];m.width=a.shape[1];m.encoding='rgb8';m.step=a.shape[1]*3;m.data=a.tobytes();self.image.publish(m);self.last_image=now
+            card_now = self.card_to_show if t < 2.5 else None
+            a=self.renderer.render(self.world.cones,self.world.pose,card_color=card_now);m=Image();m.header.stamp=stamp;m.height=a.shape[0];m.width=a.shape[1];m.encoding='rgb8';m.step=a.shape[1]*3;m.data=a.tobytes();self.image.publish(m);self.last_image=now
         self.trajectory.append([t,*self.world.pose,self.world.v,self.world.w,*self.command])
         if now-self.last_frame>=.25:
-            self.save_frame(a if 'a' in locals() else self.renderer.render(self.world.cones,self.world.pose));self.last_frame=now
+            card_now = self.card_to_show if t < 2.5 else None
+            self.save_frame(a if 'a' in locals() else self.renderer.render(self.world.cones,self.world.pose,card_color=card_now));self.last_frame=now
         camp=self.world.field.zone('camp_a' if self.args.route=='A' else 'camp_b')
         if camp.distance_to_center(self.world.pose)<.25:self.camp_truth=True
         if now-self.last_echo>5:
@@ -159,7 +167,10 @@ class WorldNode(Node):
 
     def finish(self,reason):
         s=self.last_state;done=s.get('state')=='DONE'
-        summary=dict(route=self.args.route,seed=self.args.seed,transport='real ROS2 Humble DDS',monochrome=True,drive_model='ackermann',
+        is_mono = getattr(self, 'is_mono', True)
+        summary=dict(route=self.args.route,seed=self.args.seed,transport='real ROS2 Humble DDS',monochrome=is_mono,
+                     use_card=getattr(self.args, 'use_card', False),ai_backend=getattr(self.args, 'ai_backend', 'auto'),
+                     drive_model='ackermann',
                      final_state=s.get('state'),success=done and self.camp_truth and not self.world.contacts and not self.world.wall_contacts,
                      reached_camp_truth=self.camp_truth,cone_contacts=len(self.world.contacts),wall_contacts=self.world.wall_contacts,
                      sim_time=self.world.t,metrics=s.get('metrics'),received_commands=self.received_cmd,reason=reason)
@@ -190,12 +201,24 @@ def launch_node(executable,params,log,env):
 
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--scenario',choices=['demo','random','configured'],default='demo');ap.add_argument('--config-dir');ap.add_argument('--motion-preset',choices=list(MOTION_PRESETS));ap.add_argument('--route',choices=['A','B'],default='A');ap.add_argument('--seed',type=int,default=3);ap.add_argument('--outdir',default='/output/ros_A');ap.add_argument('--max-time',type=float,default=180);ap.add_argument('--fault',choices=['none','mission_kill','scan_drop','estop','competing_publisher'],default='none');args=ap.parse_args()
+    ap=argparse.ArgumentParser()
+    ap.add_argument('--scenario',choices=['demo','random','configured'],default='demo')
+    ap.add_argument('--config-dir')
+    ap.add_argument('--motion-preset',choices=list(MOTION_PRESETS))
+    ap.add_argument('--route',choices=['A','B'],default='A')
+    ap.add_argument('--use-card',action='store_true',default=False)
+    ap.add_argument('--color',action='store_true',default=False)
+    ap.add_argument('--ai-backend',choices=['auto','npu','onnx','fast_color','cpu'],default='auto')
+    ap.add_argument('--seed',type=int,default=3)
+    ap.add_argument('--outdir',default='/output/ros_A')
+    ap.add_argument('--max-time',type=float,default=180)
+    ap.add_argument('--fault',choices=['none','mission_kill','scan_drop','estop','competing_publisher'],default='none')
+    args=ap.parse_args()
     rclpy.init();node=WorldNode(args);procs=[];logs=[];env=os.environ.copy();env['CROSSFIRE_RUN_DIR']=args.outdir
     try:
         for executable,params in [
             ('gateway',dict(armed=True,hardware_watchdog_confirmed=True,calibration_confirmed=True,output_topic='/crossfire/sim_cmd',output_mode='yaw_rate',allow_reverse=True,wheelbase=node.world.robot.wheelbase,max_steer=node.world.robot.max_steer,body_length=node.world.robot.length,body_width=node.world.robot.width,max_speed=node.motion['forward_mps'],reverse_limit=node.motion['reverse_mps'],brake_decel=node.motion['brake_mps2'])),
-            ('mission_node',dict(route=args.route,publish_cmd=True,tts='none',config_dir=str(node.runtime_config),**{'topics.scan':'/scan','topics.imu':'/imu/data','topics.odom':'/odom','topics.image':'/usb_cam/image_raw','topics.cmd_vel':'/crossfire/desired_cmd'}))]:
+            ('mission_node',dict(route=args.route,use_card=args.use_card,monochrome=node.is_mono,ai_backend=args.ai_backend,publish_cmd=True,tts='none',config_dir=str(node.runtime_config),**{'topics.scan':'/scan','topics.imu':'/imu/data','topics.odom':'/odom','topics.image':'/usb_cam/image_raw','topics.cmd_vel':'/crossfire/desired_cmd'}))]:
             log=(node.out/f'{executable}.log').open('w');logs.append(log);procs.append(launch_node(executable,params,log,env))
         deadline=time.monotonic()+args.max_time+30;fault_start=None;observations=[]
         while not node.done and time.monotonic()<deadline:

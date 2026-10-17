@@ -16,6 +16,7 @@ import numpy as np
 
 from . import imageops as I
 from .config import Config
+from .ai_vision import AIVisionEngine
 
 
 @dataclass
@@ -126,6 +127,14 @@ class Vision:
         self.card_min_ratio = float(cfg.get("card.min_area_ratio", 0.015))
         self.patch_min_ratio = float(cfg.get("floor_patch.min_area_ratio", 0.08))
         self.patch_bottom_band = float(cfg.get("floor_patch.bottom_band_ratio", 0.30))
+        ai_cfg = cfg.section("ai")
+        preferred_backend = str(ai_cfg.get("backend", "auto"))
+        model_path = str(ai_cfg.get("model_path", ""))
+        self.ai_engine = AIVisionEngine(preferred_backend=preferred_backend, model_path=model_path)
+
+    @property
+    def backend_name(self) -> str:
+        return self.ai_engine.backend_name
 
     # ---------------------------------------------------------------- #
     def _blobs(self, hsv: np.ndarray, color: str, min_area: float) -> List[Dict[str, float]]:
@@ -133,9 +142,14 @@ class Vision:
                                   self.morph_open_px, self.morph_close_px)
 
     # ---------------------------------------------------------------- #
-    def detect_card(self, hsv: np.ndarray) -> Tuple[Optional[str], float,
+    def detect_card(self, hsv: np.ndarray, img_rgb: Optional[np.ndarray] = None) -> Tuple[Optional[str], float,
                                                     Optional[Tuple[float, float, float, float]]]:
-        """识别贴在镜头前的色卡：整幅图中出现足够大的纯色块（A4 比例 1.41）。"""
+        """识别贴在镜头前的色卡：优先使用硬件加速引擎，未检出时由 HSV 形状筛选兜底。"""
+        if img_rgb is not None and getattr(self, "ai_engine", None) is not None:
+            ai_card = self.ai_engine.detect_card(img_rgb)
+            if ai_card.color is not None and ai_card.confidence > 0.4:
+                return ai_card.color, ai_card.confidence, ai_card.bbox
+
         total = float(hsv.shape[0] * hsv.shape[1])
         best = (None, 0.0, None)
         for color in ("blue", "red"):
@@ -210,10 +224,11 @@ class Vision:
         sub = img_rgb[y0:, :, :] if y0 > 0 else img_rgb
         hsv = I.to_hsv(sub)
         if want_card:
-            card_color, card_ratio, card_bbox = self.detect_card(hsv)
-            if card_bbox is not None:
-                card_bbox = (card_bbox[0], card_bbox[1] + y0,
-                             card_bbox[2], card_bbox[3] + y0)
+            card_color, card_ratio, card_bbox = self.detect_card(hsv, img_rgb=img_rgb)
+            if card_bbox is not None and card_bbox[1] < y0:
+                card_bbox = (card_bbox[0], card_bbox[1], card_bbox[2], card_bbox[3])
+            elif card_bbox is not None and y0 > 0:
+                card_bbox = (card_bbox[0], card_bbox[1] + y0, card_bbox[2], card_bbox[3] + y0)
         else:
             card_color, card_ratio, card_bbox = None, 0.0, None
         cones = self.detect_cones(hsv, row_offset=y0)

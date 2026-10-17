@@ -28,6 +28,8 @@ def generate_launch_description() -> LaunchDescription:
     args = [
         DeclareLaunchArgument("route", default_value="A"),
         DeclareLaunchArgument("use_card", default_value="false"),
+        DeclareLaunchArgument("monochrome", default_value="true"),
+        DeclareLaunchArgument("ai_backend", default_value="auto"),
         DeclareLaunchArgument("publish_cmd", default_value="false"),
         DeclareLaunchArgument("tts", default_value="auto"),
         DeclareLaunchArgument("frame_id", default_value="map"),
@@ -45,6 +47,8 @@ def generate_launch_description() -> LaunchDescription:
             {
                 "route": LaunchConfiguration("route"),
                 "use_card": LaunchConfiguration("use_card"),
+                "monochrome": LaunchConfiguration("monochrome"),
+                "ai_backend": LaunchConfiguration("ai_backend"),
                 "publish_cmd": LaunchConfiguration("publish_cmd"),
                 "tts": LaunchConfiguration("tts"),
                 "frame_id": LaunchConfiguration("frame_id"),

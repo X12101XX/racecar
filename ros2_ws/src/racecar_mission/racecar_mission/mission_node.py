@@ -53,6 +53,8 @@ class MissionNode(Node):
         self.declare_parameter("control_rate_hz", 50.0)
         self.declare_parameter("diagnostics_rate_hz", 2.0)
         self.declare_parameter("publish_markers", True)
+        self.declare_parameter("monochrome", True)
+        self.declare_parameter("ai_backend", "auto")
         for k in ("scan", "image", "image_compressed", "imu", "odom", "cmd_vel"):
             self.declare_parameter(f"topics.{k}", "")
         self.declare_parameter("overrides_json", "")   # 直接塞 JSON 覆盖任意配置
@@ -61,11 +63,17 @@ class MissionNode(Node):
         self.frame_id = str(self.get_parameter("frame_id").value)
         self.route_id = str(self.get_parameter("route").value).upper()
         self.use_card = bool(self.get_parameter("use_card").value)
+        self.monochrome = bool(self.get_parameter("monochrome").value)
+        self.ai_backend = str(self.get_parameter("ai_backend").value)
 
         cfg_dir = str(self.get_parameter("config_dir").value) or os.path.join(
             get_package_share_directory("racecar_mission"), "config")
         cfgs = self._load_configs(cfg_dir)
         self.config_dir = cfg_dir
+        if self.ai_backend:
+            if "ai" not in cfgs["vision"].data:
+                cfgs["vision"].data["ai"] = {}
+            cfgs["vision"].data["ai"]["backend"] = self.ai_backend
 
         prefer = {k: str(self.get_parameter(f"topics.{k}").value)
                   for k in ("scan", "image", "image_compressed", "imu", "odom", "cmd_vel")}
@@ -73,9 +81,13 @@ class MissionNode(Node):
         self.topics = topics
         self.io = RosRobotIO(self, topics, {"tts": self.get_parameter("tts").value, "publish_cmd": self.publish_cmd, "async_planning": True})
         mission_class = AckermannMission if cfgs["robot"].get("drive.type") == "ackermann" else Mission
-        self.mission = mission_class(self.io, cfgs,
-                               MissionConfig.from_config(cfgs["plan"], route=self.route_id,
-                                                         use_card=self.use_card))
+        mission_cfg = MissionConfig.from_config(cfgs["plan"], route=self.route_id,
+                                                use_card=self.use_card)
+        if self.use_card:
+            mission_cfg.monochrome = False
+        else:
+            mission_cfg.monochrome = self.monochrome
+        self.mission = mission_class(self.io, cfgs, mission_cfg)
         self.cfgs = cfgs
         self._last_step_t = time.monotonic()
         rate = max(5.0, float(self.get_parameter("control_rate_hz").value))

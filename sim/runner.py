@@ -133,12 +133,15 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
                       height_m=float(vision_cfg.get("camera.height_m", 0.18)))
     mount = robot_cfg.get("sensors.camera.mount", [0.16, 0.0, 0.18])
     quality = float(cfg.camera_quality)
+    is_mono = False if cfg.use_card else bool(cfgs["plan"].get("mission.monochrome", False))
+    if cfg.use_card:
+        cfgs["plan"].data.setdefault("mission", {})["monochrome"] = False
     renderer = CameraRenderer(field, cam, mount_xy=(float(mount[0]), float(mount[1])),
                               height_m=float(mount[2]),
                               brightness=0.85 + 0.3 * quality,
                               noise_sigma=3.0 / max(quality, 0.2),
                               blur=quality < 0.95,
-                              monochrome=bool(cfgs["plan"].get("mission.monochrome", False)))
+                              monochrome=is_mono)
 
     if cfg.prior in ("blue", "all"):
         # 把"赛前公布的锥桶位置"写进场地配置，再创建任务（任务内部会重新读配置）
@@ -191,9 +194,11 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
             io.put_scan(world.lidar_scan(t))
             t_next_scan += scan_period
         if t >= t_next_image:
+            card_now = ("blue" if cfg.route == "A" else "red") if (cfg.use_card and t < 2.5) else None
             img = renderer.render(world.cones, world.pose,
                                   yaw_noise=float(rng.normal(0, math.radians(0.3))),
-                                  pitch_noise=float(rng.normal(0, math.radians(0.2))))
+                                  pitch_noise=float(rng.normal(0, math.radians(0.2))),
+                                  card_color=card_now)
             io.put_image(img, t)
             last_img = img
             t_next_image += cam_period

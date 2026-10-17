@@ -170,7 +170,10 @@ class AckermannMission(Mission):
         self._failed_plans = 0
         self.async_planning = bool(getattr(io, "params", {}).get("async_planning", False))
         self.metrics['drive_model'] = 'ackermann'
-        self.metrics['monochrome'] = True
+        self.metrics['monochrome'] = bool(self.cfg.monochrome)
+        self.metrics['use_card'] = bool(self.cfg.use_card)
+        if hasattr(self.vision, "backend_name"):
+            self.metrics['ai_backend'] = self.vision.backend_name
         self.metrics['motion_strategy'] = 'forward_first_bounded_reverse'
         self.metrics["motion_settings"]=dict(self.motion)
         self.cones.seed_prior(self.io.now())
@@ -184,8 +187,11 @@ class AckermannMission(Mission):
         return tolerance>0 and zone.distance_to_center(self.pose()) < tolerance
 
     def _on_bump(self, ev):
-        self.log('bump', detail=ev.detail, hit_color='unknown')
-        self._fail('检测到碰撞：无颜色模式统一停车')
+        if self.cfg.monochrome:
+            self.log('bump', detail=ev.detail, hit_color='unknown')
+            self._fail('检测到碰撞：无颜色模式统一停车')
+        else:
+            super()._on_bump(ev)
 
     def _start_cross(self):
         self.state, self.state_t0 = State.CROSS, self.io.now()

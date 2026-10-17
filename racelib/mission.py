@@ -65,10 +65,11 @@ class MissionConfig:
     def from_config(cls, cfg: Config, route: Optional[str] = None,
                     use_card: bool = False) -> "MissionConfig":
         mc = cls()
-        mc.monochrome = bool(cfg.get("mission.monochrome", False))
         mc.use_card = bool(use_card)
-        if mc.monochrome and mc.use_card:
-            raise ValueError("无颜色模式不能启用色卡")
+        if mc.use_card:
+            mc.monochrome = False
+        else:
+            mc.monochrome = bool(cfg.get("mission.monochrome", False))
         if route:
             mc.route = str(route).upper()
         for k in ("hold_seconds", "zone_tolerance_m", "center_tolerance_m"):

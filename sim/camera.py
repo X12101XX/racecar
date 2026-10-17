@@ -55,7 +55,8 @@ class CameraRenderer:
 
     # ---------------------------------------------------------------- #
     def scene_polygons(self, cones: Sequence, t: float = 0.0,
-                       robot_pose: Optional[Sequence[float]] = None) -> List[Poly]:
+                       robot_pose: Optional[Sequence[float]] = None,
+                       card_color: Optional[str] = None) -> List[Poly]:
         f = self.field
         polys: List[Poly] = []
         L, W = f.length, f.width
@@ -99,6 +100,21 @@ class CameraRenderer:
                 shade = 1.0 + 0.12 * math.cos(k * math.pi / 2.0 + 0.4)
                 polys.append(Poly(np.array([p0, p1, apex[0]], float),
                                   tuple(int(min(255, v * shade)) for v in col), 3))
+        if card_color and not self.monochrome and robot_pose is not None:
+            col = COLOR_BLUE_CARD if card_color == "blue" else COLOR_RED_CARD
+            px, py, pyaw = robot_pose[0], robot_pose[1], robot_pose[2]
+            c, s = math.cos(pyaw), math.sin(pyaw)
+            # 车头前方 0.32m 竖置 A4 色卡（确保绕向在投影后顺时针，_fill_polygon 可正确着色）
+            d_card = 0.32
+            w_half = 0.12
+            pts_body = [
+                [d_card, -w_half, 0.22],
+                [d_card,  w_half, 0.22],
+                [d_card,  w_half, 0.02],
+                [d_card, -w_half, 0.02],
+            ]
+            card_pts = [[px + pt[0]*c - pt[1]*s, py + pt[0]*s + pt[1]*c, pt[2]] for pt in pts_body]
+            polys.append(Poly(np.array(card_pts, float), col, 4))
         return polys
 
     @staticmethod
@@ -172,7 +188,7 @@ class CameraRenderer:
 
     # ---------------------------------------------------------------- #
     def render(self, cones: Sequence, pose: Sequence[float], yaw_noise: float = 0.0,
-               pitch_noise: float = 0.0) -> np.ndarray:
+               pitch_noise: float = 0.0, card_color: Optional[str] = None) -> np.ndarray:
         cam = self.cam
         yaw = pose[2] + yaw_noise
         pitch = math.radians(cam.pitch_deg) + pitch_noise
@@ -187,7 +203,7 @@ class CameraRenderer:
         if h0 < cam.height:
             img[h0:, :] = np.asarray(COLOR_FLOOR, dtype=np.uint8)
 
-        polys = self.scene_polygons(cones, robot_pose=pose)
+        polys = self.scene_polygons(cones, robot_pose=pose, card_color=card_color)
         render_list = []
         for p in polys:
             cam_pts = self._to_camera(p.verts, cam_pos, yaw, pitch)
