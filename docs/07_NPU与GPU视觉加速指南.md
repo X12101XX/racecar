@@ -17,18 +17,18 @@
 
 ```bash
 # 所有物料无颜色，发车前手动选路
-bash tools/run_ros_sim.sh --route A
-bash tools/run_ros_sim.sh --route B
+./crossfire sim --route A
+./crossfire sim --route B
 
 # 色卡自动选择；仿真默认展示 --route 对应的卡
-bash tools/run_ros_sim.sh --use-card --route A --ai-backend fast_color
-bash tools/run_ros_sim.sh --use-card --route B --ai-backend fast_color
+./crossfire sim --use-card --route A --ai-backend fast_color
+./crossfire sim --use-card --route B --ai-backend fast_color
 
 # 特意让初始路线与色卡相反，验证实际切换：最终应为 B
-bash tools/run_ros_sim.sh --route A --use-card --card-color red --ai-backend fast_color
+./crossfire sim --route A --use-card --card-color red --ai-backend fast_color
 
 # 手动选路，同时识别物料颜色
-bash tools/run_ros_sim.sh --route A --color
+./crossfire sim --route A --color
 ```
 
 色卡必须连续两帧同色且达到置信度门槛。空帧或换色会重置；超时会停车失败，不再按预设路线偷偷发车。摄像头帧率决定确认所需时间，不能把推理耗时当成两帧确认耗时。
@@ -38,22 +38,14 @@ bash tools/run_ros_sim.sh --route A --color
 仓库附带 `models/card_classifier.onnx`、说明 JSON 和导出源码。它是**确定性的 RGB 阈值计算图**，不是训练好的 CNN 或 YOLO。它用于完成可复现的颜色推理闭环，现场仍须检查光照、曝光、背景和阈值。旧导出工具创建随机初始化 CNN 的行为已移除。
 
 ```bash
-# 依赖只装入新的 Docker 镜像，不安装到电脑或实车系统
-bash tools/prepare_vision.sh
-
-CROSSFIRE_SIM_IMAGE=crossfire-sim:vision-v2 \
-  bash tools/run_ros_sim.sh --use-card --route A --ai-backend onnx \
-  --ai-model /workspace/models/card_classifier.onnx
-
-# 含真正 ONNX 推理的完整测试；也会重新编译当前容器的 C++ 库
-CROSSFIRE_SIM_IMAGE=crossfire-sim:vision-v2 \
-  bash tools/test_in_container.sh python3 -m unittest discover -s tests -v
-
-# 多轮 ROS 闭环、实测配置、激进预设和视频完整解码
-CROSSFIRE_SIM_IMAGE=crossfire-sim:vision-v2 python3 tools/validate_simulations.py
+# 当前 Python 已有兼容 ONNX Runtime 时，原生执行真实推理
+./crossfire sim --use-card --ai-backend onnx --ai-model models/card_classifier.onnx
+./crossfire run A --use-card --ai-backend onnx --ai-model models/card_classifier.onnx
 ```
 
-`crossfire-sim:vision-v2` 安装的是 ONNX Runtime CPU 包。当前笔记本 GPU 和昇腾 NPU 均没有纳入已验证结果。
+这些入口不调用 Docker、pip 或 apt。没有推理依赖时明确报错；车端不建议全局安装或升级 NumPy / ONNX Runtime。优先复用经过板端验证的依赖或兼容的独立 Python 环境，再用 `./crossfire install --python /匹配的/python3` 选择解释器。详见 [原生安装指南](09_原生安装与隔离运行.md)。
+
+电脑缺少依赖时，旧的 `tools/prepare_vision.sh` 和 `tools/test_in_container.sh` 仍可选择用于隔离测试。这是可选开发环境，车端无需它。已验证的 `crossfire-sim:vision-v2` 使用 ONNX Runtime CPU 包；当前笔记本 GPU 和昇腾 NPU 均没有纳入已验证结果。
 
 ## 模型协议与板端配置
 
@@ -73,7 +65,7 @@ CROSSFIRE_SIM_IMAGE=crossfire-sim:vision-v2 python3 tools/validate_simulations.p
 实车命令支持 `--ai-backend`、`--ai-model` 覆盖；先保持只读：
 
 ```bash
-bash tools/run_car.sh A --use-card --ai-backend onnx --ai-model models/card_classifier.onnx
+./crossfire run A --use-card --ai-backend onnx --ai-model models/card_classifier.onnx
 ```
 
 实车必须已有兼容推理库；部署包不会自动安装。完成 [实车适配与标定清单](06_实车适配与标定清单.md) 后，才可按部署指南启用输出。

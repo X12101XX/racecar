@@ -41,9 +41,7 @@ def main():
     model=vision_data.get('ai',{}).get('model_path','')
     if model and not Path(model).is_absolute():
         vision_data['ai']['model_path']=str((root/model).resolve())
-    if not is_mono:
-        from racelib.ai_vision import AIVisionEngine
-        AIVisionEngine(vision_data.get('ai',{}).get('backend','auto'),vision_data.get('ai',{}).get('model_path',''))
+    # The mission owns model lifetime. Preflight never initializes NPU/GPU resources.
     motion=motion_settings(plan_data)
     errors,_=validate_field(field,robot_data['geometry'])
     if errors:raise SystemExit('; '.join(errors))
@@ -59,21 +57,28 @@ def main():
     domain=profile.get('ros_domain_id',0)
     if not isinstance(domain,int) or not 0<=domain<=101:raise SystemExit('非法 ROS_DOMAIN_ID')
     env=os.environ.copy();env['CROSSFIRE_PLANNER_ENGINE']=a.planner_engine;env['ROS_DOMAIN_ID']=str(domain);env['ROS_LOCALHOST_ONLY']='1'
-    run=root/'runs'/time.strftime('%Y%m%d-%H%M%S');run.mkdir(parents=True,exist_ok=False)
+    import datetime
+    run=root/'runs'/datetime.datetime.now().strftime('%Y%m%d-%H%M%S-%f');run.mkdir(parents=True,exist_ok=False)
     env['ROS_HOME']=str(run/'ros');env['ROS_LOG_DIR']=str(run/'ros/log');env['CROSSFIRE_RUN_DIR']=str(run)
+    params={'topics.scan':profile['scan_topic'],'topics.imu':profile['imu_topic'],'topics.odom':profile['odom_topic'],'topics.image':profile['image_topic'],'topics.cmd_vel':'/crossfire/desired_cmd'}
+    def command(executable,values):
+        cmd=[sys.executable,str(root/'tools/node_entry.py'),executable,'--ros-args']
+        for k,v in values.items():cmd+=['-p',f'{k}:={str(v).lower() if isinstance(v,bool) else v}']
+        return cmd
+    # Save exactly the effective data; never write the original scene/profile.
+    import shutil
+    cfg_dir=run/'config';shutil.copytree(source,cfg_dir)
+    (cfg_dir/'plan.json').write_text(json.dumps(plan_data,ensure_ascii=False,indent=2))
+    (cfg_dir/'vision.json').write_text(json.dumps(vision_data,ensure_ascii=False,indent=2))
+    (run/'vehicle_profile.used.json').write_text(json.dumps(profile,ensure_ascii=False,indent=2))
+    # Preflight has no publishers and initializes no model sessions.
+    pre=subprocess.run(command('preflight',params)+['--seconds','5','--config-dir',str(cfg_dir)],env=env)
+    if pre.returncode:raise SystemExit('只读自检未通过，未启动实车输出。日志目录: '+str(run))
+    if a.preflight:return 0
     lock_path=Path.home()/'.local/state/crossfire/mission.lock';lock_path.parent.mkdir(parents=True,exist_ok=True)
     lock=lock_path.open('a')
     try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
     except BlockingIOError:raise SystemExit('已有独立穿越火线任务在运行')
-    params={'topics.scan':profile['scan_topic'],'topics.imu':profile['imu_topic'],'topics.odom':profile['odom_topic'],'topics.image':profile['image_topic'],'topics.cmd_vel':'/crossfire/desired_cmd'}
-    def command(executable,values):
-        cmd=['ros2','run','racecar_mission',executable,'--ros-args']
-        for k,v in values.items():cmd+=['-p',f'{k}:={str(v).lower() if isinstance(v,bool) else v}']
-        return cmd
-    # preflight has no publishers. Avoid changing any active system behavior.
-    pre=subprocess.run(command('preflight',params)+['--seconds','5','--config-dir',str(source)],env=env)
-    if pre.returncode:raise SystemExit('只读自检未通过，未启动实车输出。日志目录: '+str(run))
-    if a.preflight:return 0
     children=[];files=[];stopping=False
     def stop(sig=None,frame=None):
         nonlocal stopping
@@ -86,12 +91,7 @@ def main():
             g['max_speed']=min(profile['max_speed'],motion['forward_mps']);g['reverse_limit']=min(profile['reverse_limit'],motion['reverse_mps']);g['brake_decel']=motion['brake_mps2']
             specs=[('gateway',g)]
         else:specs=[]
-        # Consistent geometry on planner and gateway, copied per run; original files untouched.
-        import shutil
-        cfg_dir=run/'config';shutil.copytree(source,cfg_dir)
-        (cfg_dir/'plan.json').write_text(json.dumps(plan_data,ensure_ascii=False,indent=2))
-        (cfg_dir/'vision.json').write_text(json.dumps(vision_data,ensure_ascii=False,indent=2))
-        specs.append(('mission_node',{**params,'route':a.route,'use_card':a.use_card,'monochrome':is_mono,'ai_backend':a.ai_backend,'publish_cmd':a.arm,'tts':'auto' if a.arm else 'none','config_dir':str(cfg_dir)}))
+        specs.append(('mission_node',{**params,'route':a.route,'use_card':a.use_card,'monochrome':is_mono,'ai_backend':a.ai_backend,'publish_cmd':a.arm,'tts':'auto' if a.arm else 'none','config_dir':str(cfg_dir),'publish_markers':False}))
         for name,values in specs:
             f=(run/f'{name}.log').open('w');files.append(f)
             children.append(subprocess.Popen(command(name,values),env=env,stdout=f,stderr=subprocess.STDOUT,start_new_session=True))

@@ -40,6 +40,7 @@ class RunConfig:
     save_frames: bool = True
     verbose: bool = True
     camera_quality: float = 1.0     # 1.0 正常；0.7 更暗更糊（鲁棒性测试）
+    card_color: Optional[str] = None
 
 
 @dataclass
@@ -194,7 +195,7 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
             io.put_scan(world.lidar_scan(t))
             t_next_scan += scan_period
         if t >= t_next_image:
-            card_now = ("blue" if cfg.route == "A" else "red") if (cfg.use_card and t < 2.5) else None
+            card_now = (cfg.card_color or ("blue" if cfg.route == "A" else "red")) if (cfg.use_card and t < 2.5) else None
             img = renderer.render(world.cones, world.pose,
                                   yaw_noise=float(rng.normal(0, math.radians(0.3))),
                                   pitch_noise=float(rng.normal(0, math.radians(0.2))),
@@ -234,13 +235,22 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
         t += cfg.physics_dt
 
     wall_time = time.time() - wall0
+    expected_route = ("A" if cfg.card_color == "blue" else "B") if cfg.use_card and cfg.card_color else cfg.route
+    camp = field.zone('camp_a' if expected_route == 'A' else 'camp_b')
+    body_in_camp = all(camp.contains(p) for p in G.rect_corners(
+        world.x, world.y, world.robot.length, world.robot.width, world.yaw))
+    stopped_in_expected_camp = (body_in_camp and abs(world.v) < .025
+                                and mission.cfg.route == expected_route)
     summary = mission.summary()
     summary.update({
         "seed": cfg.seed,
         "prior": cfg.prior,
         "use_card": cfg.use_card,
         "final_state": mission.state,
-        "reached_camp": reached_camp,
+        "reached_camp": reached_camp and stopped_in_expected_camp,
+        "expected_route": expected_route,
+        "finish_body_in_camp_truth": body_in_camp,
+        "finish_speed_mps": world.v,
         "sim_time_s": round(t, 3),
         "wall_time_s": round(wall_time, 3),
         "real_time_factor": round(t / max(wall_time, 1e-3), 2),
@@ -447,7 +457,10 @@ def make_video(frames_dir: str, out_path: str, fps: float) -> Optional[str]:
                os.path.join(frames_dir, "frame_%05d.png"),
                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                "-loglevel", "error", out_path]
+        temporary = os.path.splitext(out_path)[0] + '.partial.mp4'
+        cmd[-1] = temporary
         subprocess.run(cmd, check=True)
+        os.replace(temporary, out_path)
         return out_path
     except Exception:  # noqa: BLE001
         return None

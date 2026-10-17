@@ -30,8 +30,6 @@ from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from std_msgs.msg import String
-from geometry_msgs.msg import Point
-from visualization_msgs.msg import Marker, MarkerArray
 
 from racelib.config import Config, deep_merge, load_json
 from racelib.mission import Mission, MissionConfig, State
@@ -96,6 +94,7 @@ class MissionNode(Node):
         self.diag_timer = self.create_timer(1.0 / diag_rate, self._on_diagnostics)
         self.marker_pub = None
         if bool(self.get_parameter("publish_markers").value):
+            from visualization_msgs.msg import MarkerArray
             self.marker_pub = self.create_publisher(MarkerArray, "/crossfire/mission/markers", 1)
         self._warned: Dict[str, float] = {}
         self.get_logger().info(
@@ -163,6 +162,8 @@ class MissionNode(Node):
 
     # ------------------------------------------------------------------ #
     def _make_markers(self) -> MarkerArray:
+        from geometry_msgs.msg import Point
+        from visualization_msgs.msg import Marker, MarkerArray
         arr = MarkerArray()
         now = self.get_clock().now().to_msg()
         mid = 0

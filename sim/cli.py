@@ -24,6 +24,7 @@ def main(argv=None) -> int:
     ap.add_argument("--prior", default="none", choices=["none", "blue", "all"],
                     help="是否注入赛前公布的锥桶先验位置")
     ap.add_argument("--use-card", action="store_true", help="启用色卡识别流程")
+    ap.add_argument('--card-color', choices=['blue','red'])
     ap.add_argument('--ai-backend',choices=['auto','fast_color','cpu','onnx','npu'],default='')
     ap.add_argument('--ai-model',default='')
     ap.add_argument('--planner-engine',choices=['auto','native','python'],default='auto')
@@ -42,7 +43,7 @@ def main(argv=None) -> int:
     if args.ai_model: cfgs['vision'].data['ai']['model_path']=args.ai_model
     if args.color: cfgs['plan'].data.setdefault('mission',{})['monochrome']=False
     cfg = RunConfig(route=args.route, seed=args.seed, prior=args.prior,
-                    use_card=args.use_card, outdir=args.outdir,
+                    use_card=args.use_card, card_color=args.card_color, outdir=args.outdir,
                     video=not args.no_video, video_fps=args.fps,
                     max_time_s=args.max_time, camera_quality=args.camera_quality)
     from .scenarios import demo_cones

@@ -51,13 +51,17 @@ def show_result(container_dir, since_ns=0, root=ROOT, profile_name=''):
             temporary.unlink(missing_ok=True)
     print('\n本次仿真已结束：' + ('通过' if data.get('success') else '未完赛/失败，请查看 summary.json'))
     print('本次结果目录：' + str(result))
-    print('本次视频：' + str(result / 'video.mp4'))
-    print('播放本次视频：mpv ' + shlex.quote(str(result / 'video.mp4')))
+    if (result / 'video.mp4').is_file():
+        print('本次视频：' + str(result / 'video.mp4'))
+        print('播放本次视频：mpv ' + shlex.quote(str(result / 'video.mp4')))
+    else:
+        print('本次没有视频；轨迹、配置快照和指标保存在本次结果目录。')
     if (output / 'latest').is_symlink() and (output / 'latest').resolve() == result:
         print('最近一次已结束的结果入口：' + str(output / 'latest'))
     if profile_alias and (output / profile_alias).is_symlink() and (output / profile_alias).resolve()==result:
         print('本配置/路线的结果入口：'+str(output/profile_alias))
-        print('播放本配置/路线：mpv '+shlex.quote(str(output/profile_alias/'video.mp4')))
+        if (result/'video.mp4').is_file():
+            print('播放本配置/路线：mpv '+shlex.quote(str(output/profile_alias/'video.mp4')))
     print('请勿打开 output/demo_routeA 等历史目录来查看本次结果。')
     return True
 

@@ -226,8 +226,7 @@ class Preflight:
         if passed < len(ok):
             print("请按上面的 FAIL 项处理后重跑；仍不行就把整份输出发我。")
         else:
-            print("可以进入下一步：架空测试 ros2 launch racecar_mission mission.launch.py "
-                  "publish_cmd:=false")
+            print("可以进入下一步：./crossfire run A（或 B），只读感知与规划，不发布底盘速度")
         return 0 if passed == len(ok) else 1
 
     def _cfg_hue(self, color: str) -> str:

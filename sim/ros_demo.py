@@ -185,6 +185,9 @@ class WorldNode(Node):
             self.world.robot.length,self.world.robot.width,self.world.yaw))
         selected_route=s.get('metrics',{}).get('route')
         summary=dict(route=self.expected_route,selected_route=selected_route,
+                     simulation_namespace=os.environ.get('CROSSFIRE_SIM_NAMESPACE',''),
+                     node_launcher='direct_python' if os.environ.get('CROSSFIRE_NODE_ENTRY') else 'ros2_run',
+                     physical_output_publishers_at_end={t:self.count_publishers(t) for t in ('/car_cmd_vel','/cmd_vel')},
                      finish_body_in_camp_truth=body_in_camp,
                      initial_route=self.args.route,seed=self.args.seed,transport='real ROS2 Humble DDS',monochrome=is_mono,
                      use_card=getattr(self.args, 'use_card', False),ai_backend_requested=self.args.ai_backend,ai_backend=s.get('metrics',{}).get('ai_backend'),
@@ -215,8 +218,24 @@ class WorldNode(Node):
         return summary
 
 
+SIM_TOPICS = ('/scan','/imu/data','/odom','/usb_cam/image_raw','/crossfire/sim_cmd',
+    '/crossfire/desired_cmd','/crossfire/mission/state','/crossfire/mission/events',
+    '/crossfire/mission/announce','/crossfire/mission/markers','/crossfire/gateway_state',
+    '/crossfire/estop','/teleop_cmd_vel')
+
+
+def simulation_remaps(env):
+    prefix=env.get('CROSSFIRE_SIM_NAMESPACE','')
+    if not prefix:return []
+    result=['-r','__ns:='+prefix]
+    for topic in SIM_TOPICS:result+=['-r',topic+':='+prefix+topic]
+    return result
+
+
 def launch_node(executable,params,log,env):
-    cmd=['ros2','run','racecar_mission',executable,'--ros-args']
+    entry=env.get('CROSSFIRE_NODE_ENTRY')
+    cmd=([sys.executable,entry,executable] if entry else ['ros2','run','racecar_mission',executable])+['--ros-args']
+    cmd+=simulation_remaps(env)
     for k,v in params.items():cmd+=['-p',f'{k}:={str(v).lower() if isinstance(v,bool) else v}']
     return subprocess.Popen(cmd,stdout=log,stderr=subprocess.STDOUT,env=env,start_new_session=True)
 
@@ -239,11 +258,16 @@ def main():
     ap.add_argument('--fault',choices=['none','mission_kill','scan_drop','estop','competing_publisher'],default='none')
     args=ap.parse_args()
     os.environ['CROSSFIRE_PLANNER_ENGINE']=args.planner_engine
-    rclpy.init();node=WorldNode(args);procs=[];logs=[];env=os.environ.copy();env['CROSSFIRE_RUN_DIR']=args.outdir
+    rclpy.init(args=['--ros-args',*simulation_remaps(os.environ)] if os.environ.get('CROSSFIRE_SIM_NAMESPACE') else None);node=WorldNode(args);procs=[];logs=[];env=os.environ.copy();env['CROSSFIRE_RUN_DIR']=args.outdir
     try:
         for executable,params in [
             ('gateway',dict(armed=True,hardware_watchdog_confirmed=True,calibration_confirmed=True,output_topic='/crossfire/sim_cmd',output_mode='yaw_rate',allow_reverse=True,wheelbase=node.world.robot.wheelbase,max_steer=node.world.robot.max_steer,body_length=node.world.robot.length,body_width=node.world.robot.width,max_speed=node.motion['forward_mps'],reverse_limit=node.motion['reverse_mps'],brake_decel=node.motion['brake_mps2'])),
             ('mission_node',dict(route=args.route,use_card=args.use_card,monochrome=node.is_mono,ai_backend=args.ai_backend,publish_cmd=True,tts='none',config_dir=str(node.runtime_config),**{'topics.scan':'/scan','topics.imu':'/imu/data','topics.odom':'/odom','topics.image':'/usb_cam/image_raw','topics.cmd_vel':'/crossfire/desired_cmd'}))]:
+            prefix=env.get('CROSSFIRE_SIM_NAMESPACE','')
+            if prefix:
+                # Keep the mission's private output contract literal; DDS remaps
+                # its publisher into the isolated simulation namespace.
+                params={k:(prefix+v if isinstance(v,str) and v.startswith('/') and k!='topics.cmd_vel' and (k.endswith('_topic') or k.startswith('topics.')) else v) for k,v in params.items()}
             log=(node.out/f'{executable}.log').open('w');logs.append(log);procs.append(launch_node(executable,params,log,env))
         deadline=time.monotonic()+args.max_time;fault_start=None;observations=[]
         while not node.done and time.monotonic()<deadline:

@@ -12,8 +12,8 @@
 - [三、 项目目录结构](#三-项目目录结构)
 - [四、 快速上手指南](#四-快速上手指南)
   - [1. 启动现场 Web 可视化配置](#1-启动现场-web-可视化配置)
-  - [2. 运行本机 ROS 2 仿真（Docker 隔离）](#2-运行本机-ros-2-仿真docker-隔离)
-  - [3. 快速纯算法仿真（无需 ROS）](#3-快速纯算法仿真无需-ros)
+  - [2. 默认本机仿真（无需 Docker / ROS）](#2-默认本机仿真无需-docker--ros)
+  - [3. 完整原生 ROS 仿真（已有 Humble 时）](#3-完整原生-ros-仿真已有-humble-时)
   - [4. 工程自检与全量回归测试](#4-工程自检与全量回归测试)
 - [五、 实车部署与安全防线](#五-实车部署与安全防线)
   - [1. 部署流程（无侵入安装）](#1-部署流程无侵入安装)
@@ -89,6 +89,7 @@ flowchart TD
 
 ```text
 racecar/
+├── crossfire               # 统一入口：安装、环境检查、只读运行、本机/ROS 仿真
 ├── racelib/                # 核心算法库（Python + 可选 C++，无 ROS 依赖）
 │   ├── ackermann.py        # 基于自行车模型的 Hybrid A* 混合路径规划与扫掠碰撞检测
 │   ├── localization.py     # 场地墙面正交投影修正定位算法
@@ -115,7 +116,9 @@ racecar/
 ├── models/                 # 可复现的 RGB 阈值 ONNX 图及模型说明
 ├── tools/                  # 运维、测试与启动工具脚本
 │   ├── configure.sh        # 一键启动 Web 场地配置界面
-│   ├── run_ros_sim.sh      # 启动 Docker 隔离的 ROS 2 仿真
+│   ├── native_runtime.py  # 原生私有运行环境，不调用 colcon 或 ros2 run
+│   ├── run_local_sim.py   # 本机无 Docker 仿真，支持已保存场地
+│   ├── run_ros_sim.sh      # 可选的旧 Docker 仿真
 │   ├── selfcheck.sh        # 全套自动化单元测试与闭环验证
 │   └── package_release.py  # 打包实车独立自解压发布包
 ├── ui/                     # 现场配置界面前端静态文件 (HTML/JS)
@@ -138,34 +141,36 @@ bash tools/configure.sh
 - 控制台将打印本地 Web 访问地址（默认 `http://127.0.0.1:8765/`，端口被占时自动顺延）。
 - **功能**：拖拽起点、据点和锥桶坐标；配置歪斜围栏四角；切换保守/标准/激进三种运动预设；一键保存并导出实车/仿真通用的配置 profile。
 
-### 2. 运行本机 ROS 2 仿真（Docker 隔离）
-本机仿真通过 Docker 镜像（`crossfire-sim:humble-v2`）运行真实 ROS 2 Humble 节点和 DDS 消息通信，**宿主机无需安装 ROS 2**：
+### 2. 默认本机仿真（无需 Docker / ROS）
+
 ```bash
-# 运行路线 A 仿真（生成完整视频、事件记录与轨迹数据）
-bash tools/run_ros_sim.sh --route A --outdir output/ros_demo_A
-
-# 运行路线 B 仿真
-bash tools/run_ros_sim.sh --route B --outdir output/ros_demo_B
-
-# 使用 Web 界面保存的现场 profile 运行仿真
-bash tools/run_ros_sim.sh --profile measured_example --route A --motion-preset aggressive
+./crossfire sim --route A
+./crossfire sim --route B --no-video
+./crossfire sim --profile measured_example --route A
+./crossfire sim --use-card --card-color red --planner-engine native
+mpv output/latest/video.mp4
 ```
-仿真结束后：
-- 控制台打印视频路径，支持通过 `mpv output/latest/video.mp4` 直接查看；
-- 视频中橙色箭头表示车头方向，青色箭头表示移动方向，顶部标注挡位（`FORWARD / REVERSE / STOP`）；
-- 产物目录包含 `video.mp4`、`summary.json`、`trajectory.csv`、`events.json` 及各节点独立日志。
 
-### 3. 快速纯算法仿真（无需 ROS）
-用于调试 Hybrid A* 规划参数或避障策略，生成任务轨迹和报告：
+默认执行同一算法与自行车模型，不含 DDS 和独立网关；需要已有 NumPy/Pillow，OpenCV/SciPy 可选，视频使用已有 ffmpeg。每次创建新结果目录，保存独立配置快照。
+
+### 3. 完整原生 ROS 仿真（已有 Humble 时）
+
 ```bash
-python3 -m sim.cli --route A --no-video
-python3 -m sim.cli --scenario random --route B --seed 42 --no-video
+./crossfire install
+./crossfire ros-sim --route A
+./crossfire ros-sim --use-card --card-color red
 ```
+
+直接启动包内节点，无需 colcon、Docker 或注册同名 ROS 包。DDS domain 和每次运行的话题前缀均隔离。电脑没有 ROS 时仍可用默认算法仿真；旧的 `bash tools/run_ros_sim.sh` 保留为可选 Docker 验证入口，不作为车端依赖。
+
+详见 [原生安装与隔离运行](docs/09_原生安装与隔离运行.md)。
 
 ### 4. 工程自检与全量回归测试
-一键运行单元测试、接口契约校验和安全网关故障注入测试：
+默认运行本机单元测试、静态接口契约和算法闭环；已有原生 ROS 时可增加 DDS 与急停验证：
 ```bash
-bash tools/selfcheck.sh
+bash tools/selfcheck.sh             # 默认无 Docker
+bash tools/selfcheck.sh --ros       # 需先 ./crossfire install
+# 旧隔离测试需显式选择 --docker
 ```
 
 ---
@@ -181,18 +186,14 @@ bash tools/selfcheck.sh
    bash crossfire-car-v2.run
    cd ~/crossfire-releases/crossfire-<timestamp>
    ```
-3. 编译工作空间：
+3. 安装器自动完成已有依赖检查和私有 C++ 编译，不安装或升级系统包；无需 colcon：
    ```bash
-   bash tools/build_car.sh
+   ./crossfire doctor
+   ./crossfire run A --preflight
+   ./crossfire run A  # 默认只读，无速度发布者
    ```
-4. **只读起飞前预检**（只监听传感器，连零速度都不发送）：
-   ```bash
-   bash tools/run_car.sh A --preflight
-   ```
-5. **只读规划模式**（仅规划路径，不接管底盘）：
-   ```bash
-   bash tools/run_car.sh A
-   ```
+
+缺 ROS 时停止并列出原因；仅查看源码可用 `bash crossfire-car-v2.run --extract-only`。指定已有环境、配置位置和卸载方法见 [原生安装指南](docs/09_原生安装与隔离运行.md)。
 
 ### 2. 独立安全网关（第二道防线）
 实车运行时，底盘控制指令**禁止**由算法节点直连底盘，必须流经独立的 `gateway` 节点：
@@ -236,17 +237,18 @@ bash tools/run_car.sh A --arm
 默认无颜色模式保持手动选路 A/B，不加载模型。色卡模式要求连续两帧确认，超时停车；所有锥桶均避让。
 
 ```bash
-bash tools/run_ros_sim.sh --route A
-bash tools/run_ros_sim.sh --route B
-bash tools/run_ros_sim.sh --use-card --route A --ai-backend fast_color
+./crossfire sim --route A
+./crossfire sim --route B
+./crossfire sim --use-card --route A --ai-backend fast_color
 ```
 
 ONNX 和 NPU 现已接通色卡推理调用；显式指定后端但缺模型或运行库会报错。只有 `auto` 允许回退，结果中记录实际后端、执行器和原因。ONNX 已在本机 CPU 验证，昇腾 NPU 与 CUDA 尚未实测。锥桶和地贴颜色仍由 CPU 处理。
 
 ```bash
-bash tools/prepare_vision.sh  # 依赖留在独立 Docker 镜像
-CROSSFIRE_SIM_IMAGE=crossfire-sim:vision-v2 bash tools/run_ros_sim.sh \
-  --use-card --ai-backend onnx --ai-model /workspace/models/card_classifier.onnx
+# 需要当前 Python 已有兼容 ONNX Runtime；不自动安装
+./crossfire sim --use-card --ai-backend onnx --ai-model models/card_classifier.onnx
+# 车端先保持只读
+./crossfire run A --use-card --ai-backend onnx --ai-model models/card_classifier.onnx
 ```
 
 附带的模型是可复现 RGB 阈值图，不是训练好的 CNN；不支持直接挂载 YOLO。协议、实车配置与已知边界见 [视觉加速指南](docs/07_NPU与GPU视觉加速指南.md)。
@@ -258,10 +260,9 @@ C++ 执行 Hybrid A* 搜索、二维 Dijkstra 启发式与整车矩形扫掠碰�
 本次修正了固定尺寸状态表越界别名、节点扩容引用失效、顺逆时针围栏判断及搜索超时。规划余量不会降到执行保护余量以下；弯道扫掠不通过时先按同一制动检查减速，无法执行再停车重规划。每次规划的倒车预算仍受限制，不是整个任务的倒车总量上限。
 
 ```bash
-bash tools/build_native.sh
-bash tools/run_ros_sim.sh --route A --planner-engine native
-bash tools/run_ros_sim.sh --route A --planner-engine python
-bash tools/test_in_container.sh python3 -m tools.benchmark_planner
+./crossfire sim --route A --planner-engine native
+./crossfire sim --route A --planner-engine python
+python3 -m tools.benchmark_planner
 ```
 
 容器内重新编译当前架构的库；实车包只含 C++ 源码，在板上私有目录编译，不捆绑笔记本的 `.so`。`auto` 无原生库时选 Python，显式 `native` 不可用则报错。性能需在目标板测量，旧版 54 倍和板端延迟外推不作为当前保证。
@@ -282,4 +283,5 @@ bash tools/test_in_container.sh python3 -m tools.benchmark_planner
 | **实车适配与标定清单** | [06_实车适配与标定清单.md](docs/06_实车适配与标定清单.md) | 首次上架必填项：底盘通信、外参对齐、舵角/油门映射 |
 | **NPU/GPU 视觉加速指南** | [07_NPU与GPU视觉加速指南.md](docs/07_NPU与GPU视觉加速指南.md) | 昇腾 310B NPU 算力利用、ATC 模型转换 (ONNX $\to$ OM)、三层分工与双模式指引 |
 | **本次规划与视觉修复** | [08_规划与视觉修复验证.md](docs/08_规划与视觉修复验证.md) | 首帧地图、C++、模型推理、视频与独立部署的检查及实测 |
+| **原生安装与隔离运行** | [09_原生安装与隔离运行.md](docs/09_原生安装与隔离运行.md) | 一条命令安装、无 Docker 仿真、私有运行和原有环境保护 |
 | **赛题规则与物料规格** | [docs/competition/](docs/competition/) | 原始赛题规则说明、传感器规格说明与现场硬件参考图 |
