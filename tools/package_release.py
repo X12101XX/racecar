@@ -23,7 +23,7 @@ def copytree(src,dst):
 for name in ('config','racelib','ros2_ws','ui','profiles'):
     copytree(ROOT/name,car/name)
 (car/'tools').mkdir()
-for name in ('build_car.sh','run_car.sh','car_supervisor.py','sync_workspace.py','profile_config.py','config_editor.py','configure.sh','export_model.py'):
+for name in ('build_car.sh','run_car.sh','car_supervisor.py','sync_workspace.py','profile_config.py','config_editor.py','configure.sh','export_model.py','build_native.sh'):
     shutil.copy2(ROOT/'tools'/name,car/'tools'/name)
 (car/'docs').mkdir();shutil.copy2(ROOT/'docs/05_现场配置与运动调参.md',car/'docs/现场配置与运动调参.md');shutil.copy2(ROOT/'docs/02_车辆部署指南.md',car/'docs/车辆部署指南.md')
 shutil.copy2(ROOT/'docs/06_实车适配与标定清单.md',car/'docs/06_实车适配与标定清单.md')

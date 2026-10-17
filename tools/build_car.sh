@@ -22,6 +22,10 @@ source /opt/ros/humble/setup.bash
 set -u
 python3 -c 'import rclpy,numpy,cv2; from sensor_msgs.msg import LaserScan; from geometry_msgs.msg import Twist'
 command -v colcon >/dev/null || { echo '现有环境缺少 colcon；未安装或修改任何系统包。'; exit 2; }
+if command -v g++ >/dev/null 2>&1 && [[ -f "$ROOT/racelib/native/hybrid_astar_core.cpp" ]]; then
+    echo '正在编译 C++ 原生路径规划加速库...'
+    g++ -O3 -fPIC -shared -std=c++17 "$ROOT/racelib/native/hybrid_astar_core.cpp" -o "$ROOT/racelib/native/libhybrid_astar.so" || true
+fi
 python3 tools/sync_workspace.py
 cd "$ROOT/ros2_ws"
 colcon build --merge-install --event-handlers console_cohesion+
