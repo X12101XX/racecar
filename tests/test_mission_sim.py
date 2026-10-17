@@ -5,12 +5,13 @@ from __future__ import annotations
 import os
 import sys
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from racelib.config import load_all  # noqa: E402
 from racelib.mission import State  # noqa: E402
-from sim.runner import RunConfig, run_mission  # noqa: E402
+from sim.runner import CameraRenderer, RunConfig, run_mission  # noqa: E402
 
 
 class TestMissionEndToEnd(unittest.TestCase):
@@ -58,6 +59,26 @@ class TestMissionEndToEnd(unittest.TestCase):
         p = res.perception
         self.assertGreaterEqual(p["recall"], 0.8)
         self.assertGreaterEqual(p["precision"], 0.7)
+
+    def test_monochrome_without_video_skips_camera_rendering(self):
+        """无颜色、无视频时相机画面没有消费者，不应生成 15Hz 图像。"""
+        from sim.scenarios import demo_cones
+        cfg = RunConfig(route="A", seed=3, video=False, verbose=False, max_time_s=0.4)
+        with mock.patch.object(CameraRenderer, "render",
+                               side_effect=AssertionError("camera frames should not be rendered")):
+            res = run_mission(load_all(route="A"), cfg, cones=demo_cones())
+        self.assertAlmostEqual(res.summary["sim_time_s"], 0.4, places=2)
+
+    def test_color_mode_still_renders_camera_frames(self):
+        """色卡/颜色模式仍必须给视觉管线供图。"""
+        from sim.scenarios import demo_cones
+        original = CameraRenderer.render
+        cfg = RunConfig(route="A", seed=3, use_card=True, card_color="blue",
+                        video=False, verbose=False, max_time_s=0.4)
+        with mock.patch.object(CameraRenderer, "render", autospec=True,
+                               side_effect=original) as render:
+            run_mission(load_all(route="A"), cfg, cones=demo_cones())
+        self.assertGreater(render.call_count, 0)
 
 
 if __name__ == "__main__":

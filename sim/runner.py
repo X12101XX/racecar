@@ -143,6 +143,11 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
                               noise_sigma=3.0 / max(quality, 0.2),
                               blur=quality < 0.95,
                               monochrome=is_mono)
+    # The monochrome mission does not read camera frames. Only synthesize them
+    # when vision needs them or when a video is requested, instead of burning
+    # CPU on unused 15 Hz images.
+    uses_vision = not is_mono
+    needs_camera = uses_vision or cfg.video
 
     if cfg.prior in ("blue", "all"):
         # 把"赛前公布的锥桶位置"写进场地配置，再创建任务（任务内部会重新读配置）
@@ -195,13 +200,18 @@ def run_mission(cfgs: Optional[Dict[str, Config]] = None, cfg: Optional[RunConfi
             io.put_scan(world.lidar_scan(t))
             t_next_scan += scan_period
         if t >= t_next_image:
-            card_now = (cfg.card_color or ("blue" if cfg.route == "A" else "red")) if (cfg.use_card and t < 2.5) else None
-            img = renderer.render(world.cones, world.pose,
-                                  yaw_noise=float(rng.normal(0, math.radians(0.3))),
-                                  pitch_noise=float(rng.normal(0, math.radians(0.2))),
-                                  card_color=card_now)
-            io.put_image(img, t)
-            last_img = img
+            # Always draw the camera noise pair at the camera cadence, even
+            # when frames are not synthesized. This keeps the physics/sensor
+            # RNG stream identical for a given seed whether video/vision is on.
+            yaw_noise = float(rng.normal(0, math.radians(0.3)))
+            pitch_noise = float(rng.normal(0, math.radians(0.2)))
+            if needs_camera:
+                card_now = (cfg.card_color or ("blue" if cfg.route == "A" else "red")) if (cfg.use_card and t < 2.5) else None
+                img = renderer.render(world.cones, world.pose,
+                                      yaw_noise=yaw_noise, pitch_noise=pitch_noise,
+                                      card_color=card_now)
+                io.put_image(img, t)
+                last_img = img
             t_next_image += cam_period
         if t >= t_next_imu:
             io.put_imu(world.imu_sample(t))
@@ -380,33 +390,40 @@ def _compose_frame(renderer: CameraRenderer, cam: CameraModel, world: SimWorld,
         image = renderer.render(world.cones, world.pose)
     cam_img = Image.fromarray(image)
     d = ImageDraw.Draw(cam_img)
-    # 视觉检测可视化
-    try:
-        res = mission.vision.process(image, want_card=(mission.state == State.INIT))
-        for obs in res.cones:
-            x0, y0, x1, y1 = obs.bbox
-            col = (80, 160, 255) if obs.color == "blue" else (255, 90, 80)
-            d.rectangle([x0, y0, x1, y1], outline=col, width=2)
-            d.text((x0, max(0, y0 - 12)), f"{obs.color} {obs.dist_est:.2f}m", fill=col)
-        if res.card_color:
-            d.rectangle(res.card_bbox, outline=(255, 255, 0), width=3)
-            d.text((res.card_bbox[0], res.card_bbox[1] - 14),
-                   f"CARD {res.card_color}", fill=(255, 255, 0))
-    except Exception:  # noqa: BLE001 - 可视化失败不影响仿真
-        pass
+    # 视觉检测可视化：优先复用任务本帧已算出的结果。重复执行有状态的
+    # 视觉管线既浪费 CPU，也会让色卡连续帧确认被视频帧“加速”。
+    if not mission.cfg.monochrome:
+        res = mission.perception_for(image)
+        if res is None:
+            try:
+                res = mission.vision.process(image, want_card=False)
+            except Exception:  # noqa: BLE001 - 可视化失败不影响仿真
+                res = None
+        if res is not None:
+            for obs in res.cones:
+                x0, y0, x1, y1 = obs.bbox
+                col = (80, 160, 255) if obs.color == "blue" else (255, 90, 80)
+                d.rectangle([x0, y0, x1, y1], outline=col, width=2)
+                d.text((x0, max(0, y0 - 12)), f"{obs.color} {obs.dist_est:.2f}m", fill=col)
+            if res.card_color and res.card_bbox is not None:
+                d.rectangle(res.card_bbox, outline=(255, 255, 0), width=3)
+                d.text((res.card_bbox[0], res.card_bbox[1] - 14),
+                       f"CARD {res.card_color}", fill=(255, 255, 0))
+    tracks = mission.cones.snapshot()
+    stats = mission.cones.stats()
     text = (f"t={t:5.2f}s  state={mission.state:<15s} route={mission.cfg.route}  "
-            f"cones B{mission.cones.stats()['blue']}/R{mission.cones.stats()['red']}/"
-            f"?{mission.cones.stats()['unknown']}  cmd=({io.last_cmd[0]:.2f}, {io.last_cmd[1]:.2f})")
+            f"cones B{stats['blue']}/R{stats['red']}/?{stats['unknown']}  "
+            f"cmd=({io.last_cmd[0]:.2f}, {io.last_cmd[1]:.2f})")
     d.rectangle([0, cam.height - 20, cam.width, cam.height], fill=(0, 0, 0))
     d.text((6, cam.height - 16), text, fill=(0, 255, 120))
 
     mp = draw_map(renderer.field, world.cones, mission,
                   trajectory=np.array([[0.0, world.x, world.y, world.yaw]]),
                   size=(cam.width, cam.height), path=mission._path,
-                  waypoints=mission._waypoints, tracks=mission.cones.snapshot(),
+                  waypoints=mission._waypoints, tracks=tracks,
                   pose=world.pose,
                   title=f"route {mission.cfg.route}  state {mission.state}  "
-                        f"detected {len(mission.cones.snapshot())} cones")
+                        f"detected {len(tracks)} cones")
     out = Image.new("RGB", (cam.width * 2, cam.height), (20, 20, 20))
     out.paste(cam_img, (0, 0))
     out.paste(mp, (cam.width, 0))

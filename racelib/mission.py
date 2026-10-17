@@ -26,7 +26,7 @@ from .io import ImuSample, OdomSample, RobotIO
 from .lidarproc import Scan, extract_cones
 from .localization import PoseEstimator, PoseEstimatorConfig
 from .planner import plan_gap_waypoints, plan_path
-from .vision import Vision
+from .vision import Vision, VisionResult
 
 
 class State:
@@ -153,6 +153,8 @@ class Mission:
         self._last_card: Optional[str] = None
         self._card_seen_t = 0.0
         self._last_cones: List[Any] = []          # 最近一帧相机的锥桶观测（判撞锥颜色用）
+        self._last_vision_result: Optional[VisionResult] = None
+        self._last_vision_image: Optional[np.ndarray] = None
         self._floor = {"blue": 0.0, "red": 0.0}
         self._floor_streak = {"blue": 0, "red": 0}
         self._path: Optional[np.ndarray] = None
@@ -195,6 +197,12 @@ class Mission:
 
     def pose(self) -> Tuple[float, float, float]:
         return self.estimator.pose
+
+    def perception_for(self, image: Optional[np.ndarray]) -> Optional[VisionResult]:
+        """返回该图像已缓存的视觉结果；不要为可视化重复执行有状态的视觉管线。"""
+        if image is not None and image is self._last_vision_image:
+            return self._last_vision_result
+        return None
 
     def status(self) -> Dict[str, Any]:
         return {
@@ -264,6 +272,12 @@ class Mission:
                 self._last_img_t = t_img
                 want_card = self.state in (State.CARD, State.INIT)
                 res = self.vision.process(image, want_card=want_card)
+                # Cache the result together with the exact image it came from.
+                # Video composition must not run the stateful vision pipeline a
+                # second time on the same frame (that would double-count card
+                # confirmation frames and waste CPU).
+                self._last_vision_result = res
+                self._last_vision_image = image
                 self._floor["blue"] = res.floor_blue_ratio
                 self._floor["red"] = res.floor_red_ratio
                 for k in ("blue", "red"):

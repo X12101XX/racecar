@@ -49,8 +49,8 @@ class CameraRenderer:
         self.brightness = brightness
         self.noise_sigma = noise_sigma
         self.blur = blur
-        xs = np.arange(cam.width)
-        ys = np.arange(cam.height)
+        xs = np.arange(cam.width, dtype=np.float32)
+        ys = np.arange(cam.height, dtype=np.float32)
         self._grid_x, self._grid_y = np.meshgrid(xs, ys)
 
     # ---------------------------------------------------------------- #
@@ -172,9 +172,10 @@ class CameraRenderer:
         y1 = min(h - 1, int(np.ceil(poly_px[:, 1].max())))
         if x1 < x0 or y1 < y0:
             return
-        xs = np.arange(x0, x1 + 1, dtype=np.float32)
-        ys = np.arange(y0, y1 + 1, dtype=np.float32)
-        gx, gy = np.meshgrid(xs, ys)
+        # Reuse the pixel-coordinate grids built once in __init__ instead of
+        # allocating a new meshgrid for every visible polygon.
+        gx = self._grid_x[y0:y1 + 1, x0:x1 + 1]
+        gy = self._grid_y[y0:y1 + 1, x0:x1 + 1]
         inside = np.ones(gx.shape, dtype=bool)
         n = len(poly_px)
         for i in range(n):

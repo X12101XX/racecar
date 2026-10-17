@@ -270,14 +270,14 @@ class AckermannMission(Mission):
     def _drive_to(self, goal, speed_cap, goal_tolerance=.18, replan=True, dt=.02):
         dt=self._last_dt
         now, pose = self.io.now(), self.pose()
+        if now < self._switch_until:
+            return 0., 0.
         world = self._world()
         changed = self._last_goal is None or np.linalg.norm(np.array(goal)-self._last_goal) > .2
         blocked = bool(self._segment and any(not world.clear(p) for p in self._segment[self._next_index::2]))
         if changed or blocked:
             self._hybrid_path, self._segment = None, []
             self._speed = 0.
-        if now < self._switch_until:
-            return 0., 0.
         if not self._segment and self._hybrid_path:
             self._select_segment()
         if not self._segment:
@@ -368,7 +368,9 @@ class AckermannMission(Mission):
         if not self._hybrid_path:
             return
         self._direction = self._hybrid_path[0][1]
-        while self._hybrid_path and self._hybrid_path[0][1] == self._direction:
-            p, _ = self._hybrid_path.pop(0)
-            self._segment.append(p)
+        end = 0
+        while end < len(self._hybrid_path) and self._hybrid_path[end][1] == self._direction:
+            end += 1
+        self._segment = [p for p, _ in self._hybrid_path[:end]]
+        del self._hybrid_path[:end]
         self._next_index = 0

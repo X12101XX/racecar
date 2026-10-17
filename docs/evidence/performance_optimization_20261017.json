@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-17",
+  "base_commit": "bf164ed",
+  "scope": "local x86_64 CPU in-process simulation with cpp_native planner; no ROS DDS, no ARM64 board, no vehicle",
+  "changes": [
+    "monochrome + no-video simulation no longer synthesizes unused 15Hz camera frames",
+    "video overlay reuses the cached vision result instead of running the stateful pipeline twice",
+    "camera polygon fill reuses precomputed pixel grids",
+    "cone association/nearest-distance avoids per-track NumPy allocations",
+    "segment extraction slices once instead of repeated list.pop(0)"
+  ],
+  "measurements": {
+    "unit_tests": {
+      "command": "python3 -B -m unittest discover -s tests -v",
+      "before": {
+        "tests": 98,
+        "seconds": 50.417,
+        "log": "output/unit-tests-audit.log"
+      },
+      "after": {
+        "tests": 100,
+        "seconds": 4.979,
+        "log": "output/unit-tests-local.log"
+      }
+    },
+    "profile_route_a_seed3_no_video": {
+      "command": "python3 -m cProfile -m sim.cli --config-dir <320x240 staging> --route A --seed 3 --scenario demo --no-video --planner-engine native",
+      "before": {
+        "profile_total_s": 7.033,
+        "run_mission_s": 6.694,
+        "profile": "output/performance_optimization_20261017/profile_before.prof"
+      },
+      "after": {
+        "profile_total_s": 2.495,
+        "run_mission_s": 2.157,
+        "profile": "output/performance_optimization_20261017/profile_after.prof"
+      },
+      "note": "cProfile adds overhead; before/after are from the same host and command. Camera rendering was the dominant cost before the change."
+    },
+    "stress_both_routes_seeds_0_5": {
+      "command": "python3 -B -m sim.stress --route both --seeds 6 --jobs 4 --max-time 90",
+      "before": {
+        "runs": 12,
+        "success": 10,
+        "wall_seconds": 50.2,
+        "rtf_mean": 2.67,
+        "failed_seeds": ["A:3", "B:3"],
+        "report": "output/performance_optimization_20261017/stress_before.json"
+      },
+      "after": {
+        "runs": 12,
+        "success": 10,
+        "wall_seconds": 4.3,
+        "rtf_mean": 31.02,
+        "failed_seeds": ["A:3", "B:3"],
+        "report": "output/stress_optimization3/stress_both_none_20261017-184519.json"
+      },
+      "note": "Success count and failed seeds are unchanged; only wall-clock simulation overhead improved."
+    },
+    "cli_checks": {
+      "route_A_no_video": {
+        "wall_seconds": 0.993,
+        "final_state": "DONE",
+        "reached_camp": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0
+      },
+      "route_B_no_video": {
+        "wall_seconds": 1.039,
+        "final_state": "DONE",
+        "reached_camp": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0
+      },
+      "card_red_on_route_A": {
+        "wall_seconds": 7.87,
+        "final_state": "DONE",
+        "expected_route": "B",
+        "reached_camp": true,
+        "cone_contacts": 0,
+        "wall_contacts": 0
+      },
+      "route_A_video": {
+        "wall_seconds": 4.638,
+        "final_state": "DONE",
+        "video_decoded": true,
+        "video_duration_s": 37.25
+      }
+    }
+  },
+  "not_verified": [
+    "ARM64/Atlas board latency and Ascend NPU execution",
+    "real ROS 2 DDS scheduling and gateway timing",
+    "vehicle braking, steering calibration or track completion"
+  ]
+}

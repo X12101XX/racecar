@@ -135,8 +135,9 @@ class ConeMap:
 
     def _nearest(self, p: np.ndarray) -> Optional[ConeTrack]:
         best, best_d = None, self.cfg.assoc_dist_m
+        px, py = float(p[0]), float(p[1])
         for tr in self.tracks:
-            d = float(np.linalg.norm(p - tr.xy))
+            d = math.hypot(px - tr.x, py - tr.y)
             if d < best_d:
                 best, best_d = tr, d
         return best
@@ -208,8 +209,8 @@ class ConeMap:
     def nearest_distance(self, p: Sequence[float]) -> float:
         if not self.tracks:
             return math.inf
-        q = np.asarray(p, dtype=float)[:2]
-        return float(min(np.linalg.norm(q - t.xy) for t in self.tracks))
+        px, py = float(p[0]), float(p[1])
+        return min(math.hypot(px - t.x, py - t.y) for t in self.tracks)
 
     def stats(self) -> Dict[str, int]:
         c = {"blue": 0, "red": 0, "unknown": 0}
