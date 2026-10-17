@@ -5,8 +5,8 @@ import math
 MOTION_PRESETS = {
     'conservative': dict(forward_mps=.28, corner_mps=.18, reverse_mps=.12, accel_mps2=.35,
                          brake_mps2=.6, lookahead_m=.18, planning_margin_m=.13, arrival_m=.16, shift_pause_s=.5),
-    'standard': dict(forward_mps=.40, corner_mps=.25, reverse_mps=.20, accel_mps2=.6,
-                     brake_mps2=.6, lookahead_m=.22, planning_margin_m=.10, arrival_m=.18, shift_pause_s=.35),
+    'standard': dict(forward_mps=.40, corner_mps=.22, reverse_mps=.20, accel_mps2=.6,
+                     brake_mps2=.6, lookahead_m=.16, planning_margin_m=.10, arrival_m=.18, shift_pause_s=.35),
     'aggressive': dict(forward_mps=.65, corner_mps=.40, reverse_mps=.25, accel_mps2=1.,
                        brake_mps2=.6, lookahead_m=.30, planning_margin_m=.12, arrival_m=.18, shift_pause_s=.25),
 }

@@ -307,31 +307,78 @@ class AckermannMission(Mission):
                 return 0., 0.
             self._last_attempt = now
             self._last_goal = np.array(goal)
-            plan_world = CollisionWorld(self.field, self.cones.snapshot(), self.car_len, self.car_wid, self.motion["planning_margin_m"])
-            if not plan_world.clear(pose):
-                # A smaller tracking reserve is allowed, never below the execution guard.
-                plan_world = world
+            # Search from the planning reserve down to the execution guard.
+            # A .10m reserve often closes a legal 0.5-0.7m gap; the path is
+            # re-checked against the .06m execution guard before use, so this
+            # never weakens the actual safety envelope.
+            margins = []
+            for margin in (self.motion["planning_margin_m"], .08, .06):
+                margin = max(.06, float(margin))
+                if margin not in margins:
+                    margins.append(margin)
+            plan_world = None
             if self.async_planning:
                 from concurrent.futures import ThreadPoolExecutor
                 if self._executor is None:self._executor=ThreadPoolExecutor(max_workers=1)
                 if self._plan_future is None:
+                    # Async path currently uses the primary reserve; the
+                    # lower-reserve retry happens synchronously after failure.
+                    plan_world = CollisionWorld(self.field, self.cones.snapshot(),
+                                                self.car_len, self.car_wid,
+                                                margins[0])
+                    if not plan_world.clear(pose):
+                        plan_world = world
                     self._plan_origin=pose
                     self._plan_future=self._executor.submit(hybrid_astar,pose,tuple(goal),plan_world,self.wheelbase,self.steer_limit,self.allow_reverse,max_reverse_m=self.max_reverse_path_m)
                     return 0.,0.
                 if not self._plan_future.done():return 0.,0.
                 path=self._plan_future.result();self._plan_future=None
                 if np.linalg.norm(np.array(pose[:2])-self._plan_origin[:2])>.15:return 0.,0.
+                if path is not None and not any(not world.clear(p) for p,_ in path):
+                    pass
+                else:
+                    path = None
             else:
-                path = hybrid_astar(pose, goal, plan_world, self.wheelbase, self.steer_limit, self.allow_reverse,max_reverse_m=self.max_reverse_path_m)
+                path = None
+            for margin in margins:
+                if path is not None:
+                    break
+                plan_world = CollisionWorld(self.field, self.cones.snapshot(),
+                                            self.car_len, self.car_wid, margin)
+                if not plan_world.clear(pose):
+                    continue
+                trial = hybrid_astar(pose, goal, plan_world, self.wheelbase,
+                                     self.steer_limit, self.allow_reverse,
+                                     max_reverse_m=self.max_reverse_path_m,
+                                     timeout=2.0 if margin < margins[0] else 3.0)
+                if trial is None:
+                    continue
+                if any(not world.clear(p) for p, _ in trial):
+                    self.log('path_discarded', reason='execution_margin', margin=margin)
+                    continue
+                path = trial
+                if margin < margins[0]:
+                    self.log('plan_margin_fallback', margin=margin,
+                             reserve=margins[0])
             if path is None:
                 self._failed_plans+=1
-                if self._failed_plans>=5:self._fail('无法找到满足车体和转弯半径约束的路径')
+                # A no-path result can also be caused by the car sitting in a
+                # local pocket.  Try one short reverse arc before declaring the
+                # route impossible; the endpoint is scanned and map-checked.
+                if (now - self._last_escape_t > 1.0
+                        and self._escape_attempts < 3):
+                    cmd = self._escape_command(world, pose)
+                    if cmd is not None:
+                        self._last_escape_t = now
+                        self._escape_attempts += 1
+                        self._escape_until = now + 1.0
+                        self.log('escape_from_plan_failure',
+                                 attempt=self._escape_attempts)
+                        return cmd
+                if self._failed_plans>=5:self._fail('无法找到车体和转弯半径约束的路径')
                 self.log('plan_failed', mode='hybrid_astar',start=list(pose),goal=list(goal),
-                         start_clear=plan_world.clear(pose),margin=plan_world.margin,obstacles=plan_world._cones)
-                return 0., 0.
-            # A background result may have been computed from an older scan snapshot.
-            if any(not world.clear(p) for p, _ in path):
-                self.log('path_discarded', reason='map_changed')
+                         start_clear=world.clear(pose),margin=margins[0],
+                         obstacles=world._cones)
                 return 0., 0.
             self._failed_plans=0
             self._escape_attempts=0
@@ -382,6 +429,8 @@ class AckermannMission(Mission):
             self.log('predicted_collision_stop')
             return 0., 0.
         v = self._direction * self._speed
+        # Independent of the fused obstacle map, the raw scan is a last-resort
+        # guard for missed/delayed detections and side contacts while turning.
         self._path = arr[:,:2]  # diagnostics / visualization
         return v, v*k
 

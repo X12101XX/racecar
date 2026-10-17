@@ -53,7 +53,7 @@ class ConeMapConfig:
     planning_radius_bonus: float = 0.02     # 规划时额外放大半径，吸收地图 3~5cm 误差
     mine_extra_margin_m: float = 0.07       # 疑似地雷(红/未标色)再放大：碰蓝锥罚 5 秒，碰地雷判失败
     min_track_hits: int = 2
-    wall_reject_margin_m: float = 0.06      # 场地边界附近的检测视为墙面伪目标
+    wall_reject_margin_m: float = 0.20      # 场地边界附近的检测视为墙面伪目标
 
 
 class ConeMap:
