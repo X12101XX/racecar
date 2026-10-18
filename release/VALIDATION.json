@@ -9,10 +9,10 @@
   "vehicle_tested": false,
   "note": "Checks refer to the dated validation report; packaging does not rerun tests.",
   "artifacts": {
-    "crossfire-car-v2.run": "ed35d1e0ca2e33e15062eafbb6169599a1c1e7bf17def5772078d8f8ee722db3",
-    "crossfire-car-v2.tar.gz": "2a8088ff1e5561ffb238693fe1f740202824d73a694d1165f2a92831e2e6b134",
+    "crossfire-car-v2.run": "ea69bf23c6d88d7482bd6140c05d03dad7edabbd1018e69518bf3861264f206c",
+    "crossfire-car-v2.tar.gz": "df9c78de63e9208b1ea61ab1f4676f9213a136d5c0a6819fdd1593cb303a4415",
     "crossfire-humble-amd64-image.tar.gz": "d56ff5981ff0516a2610199382e8b659cf7a51741ae931a411ab3c8cbf4caf27",
-    "crossfire-sim-v2.tar.gz": "5dcd8c5f22e101bc72f5237e986fd41fb4b2e5dfb3040702a7273cd8f6fcc4ba"
+    "crossfire-sim-v2.tar.gz": "c217f035a81c161d453903a1fbcf82d2ffb43e50e239f47c696d0497d7dfffb5"
   },
   "native_install_validation": {
     "date": "2026-10-17T18:31:30.519410+08:00",
@@ -1173,5 +1173,62 @@
     "npu_tested": false,
     "test_boundary": "In-process paired matrix uses unchanged sensor/physics simulation and frozen inputs. Native ROS tests use existing isolated x86_64 Humble fixture only, with docker/colcon/ros2/pip/apt prohibited inside target commands. No vehicle actions or system dependency installs.",
     "limitation": "22 original incomplete matrix cases remain; results are not a promise of arbitrary-track completion or board performance."
+  },
+  "green_install_validation": {
+    "date": "2026-10-18",
+    "base_commit": "ee45f0e",
+    "installation_mode": "portable",
+    "default_extract_only": true,
+    "vehicle_connected": false,
+    "architecture": "x86_64",
+    "source_sha256": {
+      "tools/install_bundle.py": "fe0faf649fdee6ca6b25d26117cf6b8ec37954dd2fe192a2ca9bf1c173b05813",
+      "tools/native_runtime.py": "063cb94669e776e73e027a5f7cf37b3959b8ad49b9885f6c3d2837cea98b75cf",
+      "tools/native_env.sh": "b1a81f25d59ebcf23905e76611f8bcaefe08a9b5224d289017ba19aa5b853938",
+      "tools/validate_native_install.py": "92907810b75abec9a8020e4dcf891104fa75038901df8a283b9cb834a754b96c",
+      "tests/test_native_install.py": "128891f3e7fd12c9b569e45ee0daefade3c08d3fcce80a0935865322607783f8",
+      "tools/package_release.py": "ffd2a7d006dfaec01ca4f7bf882e124814436d286494deab9b1cfe80f61305cb"
+    },
+    "unit_tests": {
+      "discovered": 133,
+      "passed": 132,
+      "skipped": 1,
+      "skip_reason": "optional ONNX Runtime unavailable on host",
+      "installer_tests_passed": 13,
+      "log": "output/green-install-unit.log"
+    },
+    "native_validation": {
+      "side_by_side_install": true,
+      "existing_code_and_shell_unchanged": true,
+      "default_extract_only": true,
+      "custom_prefix_with_spaces": true,
+      "relocated_before_and_after_prepare": true,
+      "repeat_prepare_in_owned_runtime": true,
+      "home_unchanged_after_install_and_doctor": true,
+      "no_system_install_commands": true,
+      "no_docker_colcon_ros2run": true,
+      "native_compiled": true,
+      "source_nodes_verified": true,
+      "unarmed_has_no_velocity_publishers": true,
+      "arm_refused_without_calibration": true,
+      "no_external_home_state": true,
+      "code_unchanged_after_prepare": true,
+      "no_compiler_fallback_reported": true,
+      "architecture": "x86_64",
+      "python": "3.10.12",
+      "vehicle_connected": false,
+      "home_unchanged_after_read_only_checks": true,
+      "commands_log": "output/green_install_20261018/commands.log"
+    },
+    "boundaries": [
+      "No ARM64, Ascend NPU or real-vehicle test in this change.",
+      "Native preparation reuses an existing compatible ROS/Python environment; missing dependencies are reported, never installed.",
+      "The cross-release mission lock is runtime-only; installation and preflight do not create it."
+    ],
+    "validation_directory": "output/green_install_20261018",
+    "test_environment": {
+      "native_ros": "ROS2 Humble / Python 3.10.12 / x86_64",
+      "fixture": "Existing isolated compatibility environment; Docker is only the outer CI fixture, never an installed runtime dependency."
+    }
   }
 }

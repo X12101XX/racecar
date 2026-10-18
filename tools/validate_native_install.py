@@ -36,17 +36,25 @@ def main():
         if (result.returncode==0)!=(expected==0):
             raise RuntimeError('unexpected exit '+str(result.returncode)+'\n'+result.stdout+result.stderr)
         return result
-    a=work/'release A';b=work/'release B'
+    a=work/'unprepared release A';b=work/'release B'
     execute(['bash',args.bundle,'--target',a])
+    assert not (a/'.runtime').exists(),'default extraction prepared runtime'
+    # The folder may be placed anywhere before or after local preparation.
+    moved=work/'prepared release A';a.rename(moved);a=moved
+    execute(['bash',a/'crossfire','install'])
     execute(['bash',a/'crossfire','doctor'])
-    execute(['bash',args.bundle,'--target',b])
+    moved=work/'moved release A';a.rename(moved);a=moved
+    execute(['bash',a/'crossfire','doctor'])
+    execute(['bash',a/'crossfire','install'])  # Owned runtime can be regenerated after moving.
+    execute(['bash',args.bundle,'--target',b,'--prepare'])
     execute(['bash',b/'crossfire','doctor'])
     fallback=work/'release without compiler'
-    fallback_install=execute(['bash',args.bundle,'--target',fallback],extra_env={'CXX':'crossfire_missing_compiler'})
+    fallback_install=execute(['bash',args.bundle,'--target',fallback,'--prepare'],extra_env={'CXX':'crossfire_missing_compiler'})
     assert 'auto 将使用 Python' in fallback_install.stdout
     fallback_state=json.loads((fallback/'.runtime/car/runtime.json').read_text())
     assert not fallback_state['native_available']
     execute(['bash',fallback/'crossfire','doctor'])
+    assert {str(p):sha(p) for p in home.rglob('*') if p.is_file()} == original, 'installation wrote outside its prefix'
     execute(['bash',args.bundle,'--target',a],expected=2)
     codefiles={str(p):sha(p) for p in a.rglob('*.py')}
     refuse=execute(['bash',a/'crossfire','run','A','--arm'],expected=2)
@@ -55,11 +63,11 @@ def main():
     assert '只读自检未通过' in read_only.stderr
     # Inspect actual native nodes, even though no colcon install or ament registration exists.
     check=work/'check_nodes.py'
-    check.write_text('''import pathlib,rclpy
+    check.write_text('''import pathlib,rclpy,sys
 from racecar_mission.mission_node import MissionNode
 from racecar_mission.gateway import Gateway
 import racecar_mission
-root=pathlib.Path(__file__).parent/'release A'
+root=pathlib.Path(sys.argv[1])
 assert pathlib.Path(racecar_mission.__file__).resolve().is_relative_to(root)
 rclpy.init(args=['--ros-args','-p','config_dir:='+str(root/'config'),'-p','publish_markers:=false','-p','tts:=none'])
 m=MissionNode();g=Gateway()
@@ -70,13 +78,19 @@ m.destroy_node();g.destroy_node();rclpy.shutdown()
 print('native source nodes: no velocity publishers; no colcon needed')
 ''')
     state=json.loads((a/'.runtime/car/runtime.json').read_text())
-    execute(['bash',a/'tools/native_env.sh',state['ros_setup'],state['python'],check])
+    execute(['bash',a/'tools/native_env.sh',state['ros_setup'],state['python'],check,a],
+            extra_env={'ROS_HOME':str(a/'.runtime/node-check/ros'),
+                       'ROS_LOG_DIR':str(a/'.runtime/node-check/ros/log')})
     assert codefiles=={str(p):sha(p) for p in a.rglob('*.py')}
     assert all(sha(Path(name))==value for name,value in original.items())
+    assert {str(p):sha(p) for p in home.rglob('*') if p.is_file()} == original, 'read-only checks wrote outside their prefix'
     assert not attempts.exists(),'forbidden dependency command executed'
     assert not (home/'.local').exists(),'installer or preflight wrote shared global state'
     assert not (a/'ros2_ws/build').exists() and not (a/'ros2_ws/install').exists()
     result=dict(side_by_side_install=True,existing_code_and_shell_unchanged=True,
+        default_extract_only=True,custom_prefix_with_spaces=True,
+        relocated_before_and_after_prepare=True,repeat_prepare_in_owned_runtime=True,
+        home_unchanged_after_install_and_doctor=True,
         no_system_install_commands=True,no_docker_colcon_ros2run=True,
         native_compiled=state['native_available'],source_nodes_verified=True,
         unarmed_has_no_velocity_publishers=True,arm_refused_without_calibration=True,

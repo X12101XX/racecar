@@ -41,17 +41,24 @@ copytree(ROOT/'docs/evidence',car/'docs/evidence')
 首先阅读 docs/车辆部署指南.md。本包不安装系统依赖或驱动。
 首次上车必读 docs/06_实车适配与标定清单.md，其中包含尚需完成的接口适配和现场标定记录表。
 
-在车上普通用户执行 bash crossfire-car-v2.run 即完成独立解压、依赖检查与本机 C++ 编译。
+将 crossfire-car-v2.run 放到车上，以普通用户指定一个尚不存在的目录：
+    bash crossfire-car-v2.run --target "$HOME/crossfire/my-car-v2"
+可换成任意有写权限的新路径，支持空格和中文。已有目录（即使为空）、文件或链接均拒绝覆盖。
+默认只校验、解压，不检查 ROS、不编译、不执行包内程序。原有安装路径无需修改。
 不需要 Docker、colcon、pip 或系统安装；复用已有 ROS2 Humble / NumPy / OpenCV。
 缺依赖时停止并列出原因，不自动安装或升级。
 
 进入打印的目录：
-1. ./crossfire doctor
-2. ./crossfire run A --preflight
-3. ./crossfire run A  # 默认只读，无速度发布者
+1. ./crossfire install  # 显式准备本包 .runtime/car/，检查已有依赖、按本机架构编译
+2. ./crossfire doctor
+3. ./crossfire run A --preflight
+4. ./crossfire run A  # 默认只读，无速度发布者
 
-电脑只解压检查：bash crossfire-car-v2.run --extract-only
-指定已有 ROS：bash crossfire-car-v2.run --ros-setup /路径/setup.bash --python /匹配的/python3
+指定已有 ROS：./crossfire install --ros-setup /路径/setup.bash --python /匹配的/python3
+可选解压并准备：bash crossfire-car-v2.run --target /新的目录 --prepare
+同机移动：停止本包任务，整体搬动目录（含 .runtime），在新目录 ./crossfire doctor，无需改路径。
+换机器：用原始包在新机器解压，重新 ./crossfire install；不携带其他架构的编译产物。
+卸载：结束本包任务后删除自己选定的目录，无需恢复系统设置。
 实车不运行仿真；本机无 Docker 仿真使用完整仿真包中的 ./crossfire sim。
 详见 docs/09_原生安装与隔离运行.md。
 
@@ -105,6 +112,10 @@ arrival_evidence=ROOT/'docs/evidence/arrival_optimization_20261018.json'
 if arrival_evidence.exists():
     validation=ROOT/json.loads(arrival_evidence.read_text())['validation_directory']
     if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
+green_evidence=ROOT/'docs/evidence/green_install_20261018.json'
+if green_evidence.exists():
+    validation=ROOT/json.loads(green_evidence.read_text())['validation_directory']
+    if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
 for name in ('unit-vision-final.log','ros-contract-final.log','planner-benchmark.json','planner-benchmark.log','revision-faults.json','target-install-revision.json'):
     if (ROOT/'output'/name).exists(): shutil.copy2(ROOT/'output'/name,sim/'output'/name)
 archive(sim,OUT/'crossfire-sim-v2.tar.gz')
@@ -131,6 +142,9 @@ if evidence.exists():
     arrival_evidence=ROOT/'docs/evidence/arrival_optimization_20261018.json'
     if arrival_evidence.exists():
         receipt['arrival_optimization']=json.loads(arrival_evidence.read_text())
+    green_evidence=ROOT/'docs/evidence/green_install_20261018.json'
+    if green_evidence.exists():
+        receipt['green_install_validation']=json.loads(green_evidence.read_text())
     (OUT/'VALIDATION.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
 files=[p for p in sorted(OUT.iterdir()) if p.is_file() and p.name!='SHA256SUMS']
 (OUT/'SHA256SUMS').write_text(''.join(file_hash(p)+'  '+p.name+'\n' for p in files))

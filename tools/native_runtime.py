@@ -13,6 +13,28 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = ROOT / '.runtime/car'
+RUNTIME_OWNER = '.crossfire-runtime.json'
+OWNER_RECORD = {'format': 1, 'purpose': 'crossfire-private-runtime'}
+
+
+def check_runtime_directory():
+    """Refuse redirected writes and unrelated pre-existing runtime directories.
+
+    Only our generated files may be regenerated. The marker is independent of
+    the absolute install prefix, so a prepared folder can be moved intact.
+    """
+    for path in (ROOT / '.runtime', RUNTIME):
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            raise ValueError('拒绝写入非私有运行目录或链接: ' + str(path))
+    if not RUNTIME.exists():
+        return
+    for path in RUNTIME.rglob('*'):
+        if path.is_symlink() or (path.is_file() and path.stat().st_nlink != 1):
+            raise ValueError('拒绝运行目录中的符号链接或硬链接: ' + str(path))
+    if any(RUNTIME.iterdir()):
+        marker = RUNTIME / RUNTIME_OWNER
+        if not marker.is_file() or json.loads(marker.read_text()) != OWNER_RECORD:
+            raise ValueError('已有运行目录不属于本绿色包，拒绝覆盖；请将包解压到新目录: ' + str(RUNTIME))
 
 
 def verify_payload(root=ROOT):
@@ -74,10 +96,17 @@ def prepare(setup, python):
     if os.geteuid() == 0:
         raise ValueError('请以普通用户安装，不要 sudo')
     verify_payload()
+    check_runtime_directory()
     setup = setup.expanduser().absolute()
     python = shutil.which(str(python)) or str(python)
     info = probe(setup, python)  # Missing dependencies leave no runtime files.
-    RUNTIME.mkdir(parents=True, exist_ok=True)
+    (ROOT / '.runtime').mkdir(mode=0o700, exist_ok=True)
+    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    check_runtime_directory()
+    marker = RUNTIME / RUNTIME_OWNER
+    if not marker.exists():
+        with marker.open('x') as output:
+            json.dump(OWNER_RECORD, output)
     with (RUNTIME / 'prepare.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         for name in ('tmp', 'cache'):
@@ -108,7 +137,8 @@ def prepare(setup, python):
         temporary = RUNTIME / 'runtime.json.tmp'
         temporary.write_text(json.dumps(info, ensure_ascii=False, indent=2) + '\n')
         temporary.replace(RUNTIME / 'runtime.json')
-    print('安装完成：无需 Docker / colcon / pip；未启动节点或接管底盘。')
+    print('绿色运行环境准备完成：只写本目录 .runtime/car/；无需 Docker / colcon / pip。')
+    print('未修改系统路径、原有程序或终端配置；未启动节点或接管底盘。')
     print('C++ 规划：' + ('已启用' if available else '未找到编译器，auto 将使用 Python'))
     print('只读自检：' + str(ROOT / 'crossfire') + ' run A --preflight')
     return 0
@@ -116,6 +146,7 @@ def prepare(setup, python):
 
 def state():
     verify_payload()
+    check_runtime_directory()
     path = RUNTIME / 'runtime.json'
     if not path.is_file():
         raise ValueError('尚未准备原生 ROS 环境，请先 ./crossfire install')
@@ -178,6 +209,7 @@ def main(argv=None):
             if rest: ap.error('doctor 不接受额外参数')
             info = probe(Path(data['ros_setup']), data['python'])
             info.update(native_available=data['native_available'], private_directory=str(ROOT),
+                        installation_mode='portable', runtime_directory=str(RUNTIME),
                         starts_nodes=False, installs_system_packages=False)
             print(json.dumps(info, ensure_ascii=False, indent=2))
             return 0

@@ -189,22 +189,24 @@ bash tools/selfcheck.sh
 ## 五、 实车部署与安全防线
 
 ### 1. 部署流程（无侵入安装）
-实车交付包采用自解压独立源码包，不破坏小车既有系统环境、不修改 `.bashrc`、不污染已有 ROS 工作空间：
+实车交付包采用绿色独立源码包，目录由你指定；不修改 `.bashrc`、系统路径或已有 ROS 工作空间：
 
 1. 将 `release/crossfire-car-v2.run` 拷贝到小车（例如昇腾开发板）。
-2. 普通用户执行安装并进入解压后的独立目录：
+2. 普通用户指定一个**尚不存在**的目录。默认只校验、解压，不检查 ROS、不编译：
    ```bash
-   bash crossfire-car-v2.run
-   cd ~/crossfire-releases/crossfire-<timestamp>
+   DEST="$HOME/crossfire/my-car-v2"
+   bash crossfire-car-v2.run --target "$DEST"
+   cd -- "$DEST"
    ```
-3. 安装器自动完成已有依赖检查和私有 C++ 编译，不安装或升级系统包；无需 colcon：
+3. 准备运行时再执行下列命令；仅使用已有依赖，在本目录内编译 C++，无需 colcon：
    ```bash
+   ./crossfire install
    ./crossfire doctor
    ./crossfire run A --preflight
    ./crossfire run A  # 默认只读，无速度发布者
    ```
 
-缺 ROS 时停止并列出原因；仅查看源码可用 `bash crossfire-car-v2.run --extract-only`。指定已有环境、配置位置和卸载方法见 [原生安装指南](docs/09_原生安装与隔离运行.md)。
+已有目标目录（包括空目录）一律拒绝覆盖。可整体移动目录，在相同机器环境下无需修改路径配置；换到其他架构需重新准备。缺 ROS 时不自动安装或升级系统包。自选 ROS/Python、迁移、卸载与写入范围见 [绿色安装指南](docs/09_原生安装与隔离运行.md)。
 
 ### 2. 独立安全网关（第二道防线）
 实车运行时，底盘控制指令**禁止**由算法节点直连底盘，必须流经独立的 `gateway` 节点：
