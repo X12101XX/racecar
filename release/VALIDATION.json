@@ -9,10 +9,10 @@
   "vehicle_tested": false,
   "note": "Checks refer to the dated validation report; packaging does not rerun tests.",
   "artifacts": {
-    "crossfire-car-v2.run": "b1f62a98abb768f7a057cfd3a307e37fcf7580876aa39c5ed346bbab093e6e7e",
-    "crossfire-car-v2.tar.gz": "dac12b17eda524270b399daa4db133af35b6bdebd2f2166bd2be0e3519ce8d73",
+    "crossfire-car-v2.run": "a3c97d14de09c37febd3df2b509e6a7cd2984f7837154e13e7b862ed4c83a903",
+    "crossfire-car-v2.tar.gz": "36e990a256f3a915132e12c071a4502b29c75b897c697af4aa89f3c159fc3e08",
     "crossfire-humble-amd64-image.tar.gz": "d56ff5981ff0516a2610199382e8b659cf7a51741ae931a411ab3c8cbf4caf27",
-    "crossfire-sim-v2.tar.gz": "813380688c72937f0b39f1d882ace31eac195eeb27eb9696c2ee2acf75b3b3b9"
+    "crossfire-sim-v2.tar.gz": "6ca7556118d4388c31f6b52184189c99df3a98023f3abfe13e9eaa252739299f"
   },
   "native_install_validation": {
     "date": "2026-10-17T18:31:30.519410+08:00",
