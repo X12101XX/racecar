@@ -9,10 +9,10 @@
   "vehicle_tested": false,
   "note": "Checks refer to the dated validation report; packaging does not rerun tests.",
   "artifacts": {
-    "crossfire-car-v2.run": "642b8a397f3a0e1fdc422b874d45837ae2c9b1efe4ca46afbe49ae22370d63ff",
-    "crossfire-car-v2.tar.gz": "5efdea56011e633890351accc7268e898e475626e0f30e30e2fc64d80c7b612b",
+    "crossfire-car-v2.run": "b1f62a98abb768f7a057cfd3a307e37fcf7580876aa39c5ed346bbab093e6e7e",
+    "crossfire-car-v2.tar.gz": "dac12b17eda524270b399daa4db133af35b6bdebd2f2166bd2be0e3519ce8d73",
     "crossfire-humble-amd64-image.tar.gz": "d56ff5981ff0516a2610199382e8b659cf7a51741ae931a411ab3c8cbf4caf27",
-    "crossfire-sim-v2.tar.gz": "11d86e01b567d321bfbc651e2dbc2702394c9a89a745ac22a4f526abb04e4130"
+    "crossfire-sim-v2.tar.gz": "813380688c72937f0b39f1d882ace31eac195eeb27eb9696c2ee2acf75b3b3b9"
   },
   "native_install_validation": {
     "date": "2026-10-17T18:31:30.519410+08:00",
@@ -1230,5 +1230,79 @@
       "native_ros": "ROS2 Humble / Python 3.10.12 / x86_64",
       "fixture": "Existing isolated compatibility environment; Docker is only the outer CI fixture, never an installed runtime dependency."
     }
+  },
+  "environment_audit": {
+    "date": "2026-10-18",
+    "base_commit": "9d8c0ce",
+    "runtime_code_changed": false,
+    "validation_directory": "output/environment_audit_20261018",
+    "unit_tests": {
+      "passed": 13,
+      "failed": 0,
+      "log": "output/environment_audit_20261018/unit.log"
+    },
+    "source_sha256": {
+      "crossfire": "b35433de53ab7beeb6eb98398281d93c8249796f6417fa3dad659af98195b155",
+      "tools/native_runtime.py": "063cb94669e776e73e027a5f7cf37b3959b8ad49b9885f6c3d2837cea98b75cf",
+      "tools/native_env.sh": "b1a81f25d59ebcf23905e76611f8bcaefe08a9b5224d289017ba19aa5b853938",
+      "tools/build_native.sh": "53b56627527a7302da32feadc5592268afd425c35b5b63a84425ce854125385e",
+      "tools/validate_native_install.py": "3a009c7499e44132025a2c604dac3ded1d527570a58135fcd880873fa08d2f3d"
+    },
+    "tested_input_artifacts": {
+      "crossfire-car-v2.run": "642b8a397f3a0e1fdc422b874d45837ae2c9b1efe4ca46afbe49ae22370d63ff",
+      "crossfire-car-v2.tar.gz": "5efdea56011e633890351accc7268e898e475626e0f30e30e2fc64d80c7b612b"
+    },
+    "native_audit": {
+      "side_by_side_install": true,
+      "existing_code_and_shell_unchanged": true,
+      "install_only_wrote_private_runtime": true,
+      "install_created_paths": [
+        ".runtime",
+        ".runtime/car",
+        ".runtime/car/.crossfire-runtime.json",
+        ".runtime/car/cache",
+        ".runtime/car/libhybrid_astar.so",
+        ".runtime/car/prepare.lock",
+        ".runtime/car/runtime.json",
+        ".runtime/car/tmp"
+      ],
+      "doctor_package_tree_unchanged": true,
+      "default_extract_only": true,
+      "custom_prefix_with_spaces": true,
+      "relocated_before_and_after_prepare": true,
+      "repeat_prepare_in_owned_runtime": true,
+      "home_unchanged_after_install_and_doctor": true,
+      "no_system_install_commands": true,
+      "no_docker_colcon_ros2run": true,
+      "native_compiled": true,
+      "source_nodes_verified": true,
+      "unarmed_has_no_velocity_publishers": true,
+      "arm_refused_without_calibration": true,
+      "no_external_home_state": true,
+      "code_unchanged_after_prepare": true,
+      "no_compiler_fallback_reported": true,
+      "architecture": "x86_64",
+      "python": "3.10.12",
+      "vehicle_connected": false
+    },
+    "readonly_doctor": {
+      "passed": true,
+      "exit_code": 0,
+      "package_mount_readonly": true,
+      "home_mount_readonly": true,
+      "ordinary_system_filesystem_readonly": true,
+      "no_writable_tmp_mount": true,
+      "network_disabled": true,
+      "log": "output/environment_audit_20261018/doctor-readonly.log"
+    },
+    "boundary": {
+      "ros_setup_executed_in_child": true,
+      "existing_python_dependencies_imported": true,
+      "custom_setup_or_dependency_side_effects_not_sandboxed_on_vehicle": true,
+      "board_connected": false,
+      "arm64_tested": false,
+      "ascend_npu_tested": false
+    },
+    "environment": "Existing isolated x86_64 ROS2 Humble / Python 3.10.12 compatibility fixture; car install and doctor themselves do not require Docker."
   }
 }

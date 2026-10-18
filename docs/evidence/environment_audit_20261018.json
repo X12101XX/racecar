@@ -1,0 +1,74 @@
+{
+  "date": "2026-10-18",
+  "base_commit": "9d8c0ce",
+  "runtime_code_changed": false,
+  "validation_directory": "output/environment_audit_20261018",
+  "unit_tests": {
+    "passed": 13,
+    "failed": 0,
+    "log": "output/environment_audit_20261018/unit.log"
+  },
+  "source_sha256": {
+    "crossfire": "b35433de53ab7beeb6eb98398281d93c8249796f6417fa3dad659af98195b155",
+    "tools/native_runtime.py": "063cb94669e776e73e027a5f7cf37b3959b8ad49b9885f6c3d2837cea98b75cf",
+    "tools/native_env.sh": "b1a81f25d59ebcf23905e76611f8bcaefe08a9b5224d289017ba19aa5b853938",
+    "tools/build_native.sh": "53b56627527a7302da32feadc5592268afd425c35b5b63a84425ce854125385e",
+    "tools/validate_native_install.py": "3a009c7499e44132025a2c604dac3ded1d527570a58135fcd880873fa08d2f3d"
+  },
+  "tested_input_artifacts": {
+    "crossfire-car-v2.run": "642b8a397f3a0e1fdc422b874d45837ae2c9b1efe4ca46afbe49ae22370d63ff",
+    "crossfire-car-v2.tar.gz": "5efdea56011e633890351accc7268e898e475626e0f30e30e2fc64d80c7b612b"
+  },
+  "native_audit": {
+    "side_by_side_install": true,
+    "existing_code_and_shell_unchanged": true,
+    "install_only_wrote_private_runtime": true,
+    "install_created_paths": [
+      ".runtime",
+      ".runtime/car",
+      ".runtime/car/.crossfire-runtime.json",
+      ".runtime/car/cache",
+      ".runtime/car/libhybrid_astar.so",
+      ".runtime/car/prepare.lock",
+      ".runtime/car/runtime.json",
+      ".runtime/car/tmp"
+    ],
+    "doctor_package_tree_unchanged": true,
+    "default_extract_only": true,
+    "custom_prefix_with_spaces": true,
+    "relocated_before_and_after_prepare": true,
+    "repeat_prepare_in_owned_runtime": true,
+    "home_unchanged_after_install_and_doctor": true,
+    "no_system_install_commands": true,
+    "no_docker_colcon_ros2run": true,
+    "native_compiled": true,
+    "source_nodes_verified": true,
+    "unarmed_has_no_velocity_publishers": true,
+    "arm_refused_without_calibration": true,
+    "no_external_home_state": true,
+    "code_unchanged_after_prepare": true,
+    "no_compiler_fallback_reported": true,
+    "architecture": "x86_64",
+    "python": "3.10.12",
+    "vehicle_connected": false
+  },
+  "readonly_doctor": {
+    "passed": true,
+    "exit_code": 0,
+    "package_mount_readonly": true,
+    "home_mount_readonly": true,
+    "ordinary_system_filesystem_readonly": true,
+    "no_writable_tmp_mount": true,
+    "network_disabled": true,
+    "log": "output/environment_audit_20261018/doctor-readonly.log"
+  },
+  "boundary": {
+    "ros_setup_executed_in_child": true,
+    "existing_python_dependencies_imported": true,
+    "custom_setup_or_dependency_side_effects_not_sandboxed_on_vehicle": true,
+    "board_connected": false,
+    "arm64_tested": false,
+    "ascend_npu_tested": false
+  },
+  "environment": "Existing isolated x86_64 ROS2 Humble / Python 3.10.12 compatibility fixture; car install and doctor themselves do not require Docker."
+}

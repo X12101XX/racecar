@@ -122,6 +122,10 @@ green_evidence=ROOT/'docs/evidence/green_install_20261018.json'
 if green_evidence.exists():
     validation=ROOT/json.loads(green_evidence.read_text())['validation_directory']
     if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
+environment_evidence=ROOT/'docs/evidence/environment_audit_20261018.json'
+if environment_evidence.exists():
+    validation=ROOT/json.loads(environment_evidence.read_text())['validation_directory']
+    if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
 for name in ('unit-vision-final.log','ros-contract-final.log','planner-benchmark.json','planner-benchmark.log','revision-faults.json','target-install-revision.json'):
     if (ROOT/'output'/name).exists(): shutil.copy2(ROOT/'output'/name,sim/'output'/name)
 archive(sim,OUT/'crossfire-sim-v2.tar.gz')
@@ -151,6 +155,9 @@ if evidence.exists():
     green_evidence=ROOT/'docs/evidence/green_install_20261018.json'
     if green_evidence.exists():
         receipt['green_install_validation']=json.loads(green_evidence.read_text())
+    environment_evidence=ROOT/'docs/evidence/environment_audit_20261018.json'
+    if environment_evidence.exists():
+        receipt['environment_audit']=json.loads(environment_evidence.read_text())
     (OUT/'VALIDATION.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
 files=[p for p in sorted(OUT.iterdir()) if p.is_file() and p.name!='SHA256SUMS']
 (OUT/'SHA256SUMS').write_text(''.join(file_hash(p)+'  '+p.name+'\n' for p in files))
