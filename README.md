@@ -191,11 +191,12 @@ bash tools/selfcheck.sh
 ### 1. 部署流程（无侵入安装）
 实车交付包采用绿色独立源码包，目录由你指定；不修改 `.bashrc`、系统路径或已有 ROS 工作空间：
 
-1. 将 `release/crossfire-car-v2.run` 拷贝到小车（例如昇腾开发板）。
-2. 普通用户指定一个**尚不存在**的目录。默认只校验、解压，不检查 ROS、不编译：
+1. 将绿色压缩包 `release/crossfire-car-v2.tar.gz` 拷贝到小车（例如昇腾开发板）。Linux 推荐此格式，可保留脚本执行权限。
+2. 普通用户指定一个**尚不存在**的目录，解压不会执行包内程序：
    ```bash
-   DEST="$HOME/crossfire/my-car-v2"
-   bash crossfire-car-v2.run --target "$DEST"
+   DEST="$HOME/my-crossfire-v2"
+   mkdir -m 700 -- "$DEST" &&
+   tar -xzf crossfire-car-v2.tar.gz --strip-components=1 --keep-old-files -C "$DEST" &&
    cd -- "$DEST"
    ```
 3. 准备运行时再执行下列命令；仅使用已有依赖，在本目录内编译 C++，无需 colcon：
@@ -206,7 +207,7 @@ bash tools/selfcheck.sh
    ./crossfire run A  # 默认只读，无速度发布者
    ```
 
-已有目标目录（包括空目录）一律拒绝覆盖。可整体移动目录，在相同机器环境下无需修改路径配置；换到其他架构需重新准备。缺 ROS 时不自动安装或升级系统包。自选 ROS/Python、迁移、卸载与写入范围见 [绿色安装指南](docs/09_原生安装与隔离运行.md)。
+上述命令只有新目录创建成功才解压，已有目标目录（包括空目录）会停止。可整体移动目录，在相同机器环境下无需修改路径配置；换到其他架构需重新准备。缺 ROS 时不自动安装或升级系统包。`.run` 作为可选的解压前校验工具保留。自选 ROS/Python、迁移、卸载与写入范围见 [绿色安装指南](docs/09_原生安装与隔离运行.md)。
 
 ### 2. 独立安全网关（第二道防线）
 实车运行时，底盘控制指令**禁止**由算法节点直连底盘，必须流经独立的 `gateway` 节点：
