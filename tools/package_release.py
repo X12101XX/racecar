@@ -34,6 +34,7 @@ if (ROOT/'docs/07_NPU与GPU视觉加速指南.md').exists():
     shutil.copy2(ROOT/'docs/07_NPU与GPU视觉加速指南.md',car/'docs/07_NPU与GPU视觉加速指南.md')
 shutil.copy2(ROOT/'docs/08_规划与视觉修复验证.md',car/'docs/08_规划与视觉修复验证.md')
 shutil.copy2(ROOT/'docs/09_原生安装与隔离运行.md',car/'docs/09_原生安装与隔离运行.md')
+shutil.copy2(ROOT/'docs/10_到达时间优化与验证.md',car/'docs/10_到达时间优化与验证.md')
 copytree(ROOT/'docs/evidence',car/'docs/evidence')
 (car/'README.md').write_text('''# 独立实车包 v2
 
@@ -85,7 +86,7 @@ for name in ('racelib','sim','ros2_ws','config','tests','tools','containers','ui
 for name in ('README.md','requirements.txt','.dockerignore','crossfire'):
     shutil.copy2(ROOT/name,sim/name)
 (sim/'docs').mkdir()
-for name in ('01_系统架构与算法.md','02_车辆部署指南.md','03_测试报告.md','05_现场配置与运动调参.md','06_实车适配与标定清单.md','07_NPU与GPU视觉加速指南.md','08_规划与视觉修复验证.md','09_原生安装与隔离运行.md'):
+for name in ('01_系统架构与算法.md','02_车辆部署指南.md','03_测试报告.md','05_现场配置与运动调参.md','06_实车适配与标定清单.md','07_NPU与GPU视觉加速指南.md','08_规划与视觉修复验证.md','09_原生安装与隔离运行.md','10_到达时间优化与验证.md'):
     if (ROOT/'docs'/name).exists():shutil.copy2(ROOT/'docs'/name,sim/'docs'/name)
 copytree(ROOT/'docs/evidence',sim/'docs/evidence')
 copytree(ROOT/'docs/ros2_humble_msgs',sim/'docs/ros2_humble_msgs')
@@ -99,6 +100,10 @@ if evidence.exists():
 native_evidence=ROOT/'docs/evidence/native_install_validation.json'
 if native_evidence.exists():
     validation=ROOT/json.loads(native_evidence.read_text())['validation_directory']
+    if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
+arrival_evidence=ROOT/'docs/evidence/arrival_optimization_20261018.json'
+if arrival_evidence.exists():
+    validation=ROOT/json.loads(arrival_evidence.read_text())['validation_directory']
     if validation.is_dir(): copytree(validation,sim/'output'/validation.name)
 for name in ('unit-vision-final.log','ros-contract-final.log','planner-benchmark.json','planner-benchmark.log','revision-faults.json','target-install-revision.json'):
     if (ROOT/'output'/name).exists(): shutil.copy2(ROOT/'output'/name,sim/'output'/name)
@@ -123,6 +128,9 @@ if evidence.exists():
     native_evidence=ROOT/'docs/evidence/native_install_validation.json'
     if native_evidence.exists():
         receipt['native_install_validation']=json.loads(native_evidence.read_text())
+    arrival_evidence=ROOT/'docs/evidence/arrival_optimization_20261018.json'
+    if arrival_evidence.exists():
+        receipt['arrival_optimization']=json.loads(arrival_evidence.read_text())
     (OUT/'VALIDATION.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
 files=[p for p in sorted(OUT.iterdir()) if p.is_file() and p.name!='SHA256SUMS']
 (OUT/'SHA256SUMS').write_text(''.join(file_hash(p)+'  '+p.name+'\n' for p in files))

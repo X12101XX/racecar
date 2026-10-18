@@ -232,6 +232,39 @@ class AckermannMission(Mission):
         self._segment = []
         self.log('cross_start', mode='hybrid_astar')
 
+    def _planning_margins(self):
+        margins = []
+        for margin in (self.motion['planning_margin_m'], .08, .06):
+            margin = max(.06, float(margin))
+            if margin not in margins:
+                margins.append(margin)
+        return margins
+
+    def _prime_plan(self, goal):
+        """Use mandatory stationary time for planning; never publish motion."""
+        if not self.async_planning or self._plan_future is not None:
+            return False
+        from concurrent.futures import ThreadPoolExecutor
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1)
+        pose = self.pose()
+        cones = self.cones.snapshot()
+        worlds = [CollisionWorld(self.field, cones, self.car_len, self.car_wid,
+                                 margin) for margin in self._planning_margins()]
+        self._plan_origin, self._plan_goal = pose, tuple(goal)
+        self._last_attempt = self.io.now()
+        self._plan_future = self._executor.submit(self._search_reserves,
+            pose, tuple(goal), worlds, self.wheelbase, self.steer_limit,
+            self.allow_reverse, self.max_reverse_path_m)
+        return True
+
+    def _st_mapping(self, dt):
+        if (self.io.now()-self.state_t0 >= max(0., self.cfg.mapping_seconds-.35)
+                and self._scan_count >= self.cfg.mapping_min_scans):
+            if self._prime_plan(self._target_zone('stronghold').center):
+                self.log('planning_prefetched', phase='mapping')
+        return super()._st_mapping(dt)
+
     def _st_hold(self, dt):
         # Three seconds begin after measured longitudinal and angular motion settles.
         now=self.io.now()
@@ -245,6 +278,10 @@ class AckermannMission(Mission):
             self.metrics['hold_actual_s']=round(now-self._hold_started,3)
             self.log('hold_done',seconds=self.metrics['hold_actual_s'])
             self._start_cross()
+        if (stopped and self._hold_started is not None
+                and now-self._hold_started >= max(0., self.cfg.hold_seconds-.35)):
+            if self._prime_plan(self._target_zone('camp').center):
+                self.log('planning_prefetched', phase='hold')
         return 0.,0.
 
     def _st_cross(self, dt):
@@ -303,63 +340,45 @@ class AckermannMission(Mission):
                 cmd = self._escape_command(world, pose)
                 if cmd is not None:
                     return cmd
-            if now - self._last_attempt < .6:
+            if self._plan_future is None and now - self._last_attempt < .6:
                 return 0., 0.
-            self._last_attempt = now
+            if self._plan_future is None:
+                self._last_attempt = now
             self._last_goal = np.array(goal)
-            # Search from the planning reserve down to the execution guard.
-            # A .10m reserve often closes a legal 0.5-0.7m gap; the path is
-            # re-checked against the .06m execution guard before use, so this
-            # never weakens the actual safety envelope.
-            margins = []
-            for margin in (self.motion["planning_margin_m"], .08, .06):
-                margin = max(.06, float(margin))
-                if margin not in margins:
-                    margins.append(margin)
-            plan_world = None
+            margins = self._planning_margins()
+            # Materialize obstacle coordinates before submitting: tracker
+            # objects continue changing in sensor callbacks.
             if self.async_planning:
-                from concurrent.futures import ThreadPoolExecutor
-                if self._executor is None:self._executor=ThreadPoolExecutor(max_workers=1)
                 if self._plan_future is None:
-                    # Async path currently uses the primary reserve; the
-                    # lower-reserve retry happens synchronously after failure.
-                    plan_world = CollisionWorld(self.field, self.cones.snapshot(),
-                                                self.car_len, self.car_wid,
-                                                margins[0])
-                    if not plan_world.clear(pose):
-                        plan_world = world
-                    self._plan_origin=pose
-                    self._plan_future=self._executor.submit(hybrid_astar,pose,tuple(goal),plan_world,self.wheelbase,self.steer_limit,self.allow_reverse,max_reverse_m=self.max_reverse_path_m)
-                    return 0.,0.
-                if not self._plan_future.done():return 0.,0.
-                path=self._plan_future.result();self._plan_future=None
-                if np.linalg.norm(np.array(pose[:2])-self._plan_origin[:2])>.15:return 0.,0.
-                if path is not None and not any(not world.clear(p) for p,_ in path):
-                    pass
-                else:
-                    path = None
+                    self._prime_plan(goal)
+                    return 0., 0.
+                if not self._plan_future.done():
+                    return 0., 0.
+                path, selected_margin, elapsed = self._plan_future.result()
+                self._plan_future = None
+                if (tuple(goal) != self._plan_goal or
+                    math.dist(pose[:2], self._plan_origin[:2]) > .15 or
+                    abs(G.wrap_pi(pose[2]-self._plan_origin[2])) > .25):
+                    self._last_attempt = -1e9
+                    self.log('path_discarded', reason='stale_plan_origin_or_goal')
+                    return 0., 0.
             else:
+                worlds = [CollisionWorld(self.field, self.cones.snapshot(),
+                    self.car_len, self.car_wid, margin) for margin in margins]
+                path, selected_margin, elapsed = self._search_reserves(pose,
+                    tuple(goal), worlds, self.wheelbase, self.steer_limit,
+                    self.allow_reverse, self.max_reverse_path_m)
+            self.metrics['planning_calls'] = self.metrics.get('planning_calls', 0)+1
+            self.metrics['planning_wall_s'] = round(self.metrics.get('planning_wall_s', 0.)+elapsed, 6)
+            # Recheck against the current sensor map, including async results.
+            if path is not None and any(not world.clear(p) for p, _ in path):
+                self.log('path_discarded', reason='execution_margin', margin=selected_margin)
+                if self.async_planning:
+                    self._last_attempt = -1e9
+                    return 0., 0.
                 path = None
-            for margin in margins:
-                if path is not None:
-                    break
-                plan_world = CollisionWorld(self.field, self.cones.snapshot(),
-                                            self.car_len, self.car_wid, margin)
-                if not plan_world.clear(pose):
-                    continue
-                trial = hybrid_astar(pose, goal, plan_world, self.wheelbase,
-                                     self.steer_limit, self.allow_reverse,
-                                     max_reverse_m=self.max_reverse_path_m,
-                                     timeout=2.0 if margin < margins[0] else 3.0)
-                if trial is None:
-                    continue
-                if any(not world.clear(p) for p, _ in trial):
-                    self.log('path_discarded', reason='execution_margin', margin=margin)
-                    continue
-                path = trial
-                if margin < margins[0]:
-                    self.log('plan_margin_fallback', margin=margin,
-                             reserve=margins[0])
+            if path is not None and selected_margin < margins[0]:
+                self.log('plan_margin_fallback', margin=selected_margin, reserve=margins[0])
             if path is None:
                 self._failed_plans+=1
                 # A no-path result can also be caused by the car sitting in a
@@ -388,7 +407,9 @@ class AckermannMission(Mission):
                 return 0., 0.
             engine_name = self.metrics.get('planner_engine', 'cpp_native')
             self.log('path_planned', n=len(path), mode='hybrid_astar', engine=engine_name,
-                     start=list(pose),goal=list(goal),planning_margin_m=plan_world.margin)
+                     start=list(pose),goal=list(goal),planning_margin_m=selected_margin,
+                     planning_wall_s=round(elapsed,6))
+        self._shortcut_terminal(world, pose, goal, speed_cap, now)
         arr = np.asarray(self._segment)
         stop = min(len(arr), self._next_index + 30)
         nearest = self._next_index + int(np.argmin(np.linalg.norm(arr[self._next_index:stop, :2]-pose[:2],axis=1)))
@@ -436,6 +457,64 @@ class AckermannMission(Mission):
             v = 0.0
         self._path = arr[:,:2]  # diagnostics / visualization
         return v, v*k
+
+    def _shortcut_terminal(self, world, pose, goal, speed_cap, now):
+        # Simplify only the final leg (past the middle blockade). All geometry
+        # comes from the fused sensor map; reserve is at least 0.13 m.
+        if (self.state != State.CROSS or speed_cap <= 0 or self._direction < 0 or self._hybrid_path or
+            pose[0] < sorted(self.field.blockade_lines_x)[1]+self.car_len/2+.10 or
+            now-getattr(self, '_last_shortcut_check', -1e9) < .4):
+            return
+        self._last_shortcut_check = now
+        tx, ty = G.world_to_body(pose, goal)
+        r2 = tx*tx+ty*ty
+        if tx < .05 or r2 < .04:
+            return
+        curvature = 2*ty/r2
+        angle = 2*math.atan2(ty, tx)
+        if abs(curvature) > math.tan(self.steer_limit)/self.wheelbase or abs(angle) > 2.:
+            return
+        distance = tx if abs(curvature) < 1e-8 else angle/curvature
+        cap = min(speed_cap, self.motion['forward_mps'],
+                  self.motion['corner_mps'] if abs(curvature) > .9 else speed_cap)
+        remaining = np.asarray([pose]+self._segment[self._next_index:])
+        lengths = np.linalg.norm(np.diff(remaining[:, :2], axis=0), axis=1)
+        angles = np.diff(remaining[:, 2])
+        angles = (angles+math.pi) % (2*math.pi)-math.pi
+        curvatures = np.abs(angles)/np.maximum(lengths, 1e-8)
+        speeds = np.minimum(min(speed_cap, self.motion['forward_mps']),
+                            np.where(curvatures > .9, self.motion['corner_mps'], speed_cap))
+        old_time = float(np.sum(lengths/np.maximum(speeds, .01)))
+        if distance/cap+.3 >= old_time:
+            return
+        reserve = CollisionWorld(self.field, self.cones.snapshot(), self.car_len,
+                                 self.car_wid, max(.13, self.motion['planning_margin_m']))
+        if not reserve.edge(pose, distance, curvature):
+            return
+        count = max(1,int(math.ceil(distance/.035)))
+        path = [integrate(pose,distance*i/count,curvature) for i in range(count+1)]
+        if any(not world.clear(p) for p in path):
+            return
+        self._segment = path
+        self._next_index = 0
+        self.metrics['terminal_shortcuts'] = self.metrics.get('terminal_shortcuts',0)+1
+        self.log('terminal_path_shortcut',distance_m=round(distance,3),
+                 estimated_saved_s=round(old_time-distance/cap,3))
+
+    @staticmethod
+    def _search_reserves(pose, goal, worlds, wheelbase, steer_limit,
+                         allow_reverse, max_reverse_path_m):
+        """All reserve retries run in the worker, never in a ROS callback."""
+        started = time.monotonic()
+        for index, world in enumerate(worlds):
+            if not world.clear(pose):
+                continue
+            path = hybrid_astar(pose, goal, world, wheelbase, steer_limit,
+                allow_reverse, max_reverse_m=max_reverse_path_m,
+                timeout=3.0 if index == 0 else 2.0)
+            if path is not None:
+                return path, world.margin, time.monotonic()-started
+        return None, worlds[0].margin, time.monotonic()-started
 
     def _raw_body_clearance(self, direction: float) -> float:
         if self._last_scan is None:

@@ -9,10 +9,10 @@
   "vehicle_tested": false,
   "note": "Checks refer to the dated validation report; packaging does not rerun tests.",
   "artifacts": {
-    "crossfire-car-v2.run": "775bdcd763c9b57ff8451e3e44ee21bf0415c20ff5fc82d87e0c404136deb889",
-    "crossfire-car-v2.tar.gz": "657491bf6c53864796adbdc35520e601e266169d40ae3220ee6e19672c0b8735",
+    "crossfire-car-v2.run": "ed35d1e0ca2e33e15062eafbb6169599a1c1e7bf17def5772078d8f8ee722db3",
+    "crossfire-car-v2.tar.gz": "2a8088ff1e5561ffb238693fe1f740202824d73a694d1165f2a92831e2e6b134",
     "crossfire-humble-amd64-image.tar.gz": "d56ff5981ff0516a2610199382e8b659cf7a51741ae931a411ab3c8cbf4caf27",
-    "crossfire-sim-v2.tar.gz": "28605238d77783896d7acbbf51661303b6fd4e9ddba0f9721065337f51cc6d19"
+    "crossfire-sim-v2.tar.gz": "5dcd8c5f22e101bc72f5237e986fd41fb4b2e5dfb3040702a7273cd8f6fcc4ba"
   },
   "native_install_validation": {
     "date": "2026-10-17T18:31:30.519410+08:00",
@@ -664,5 +664,514 @@
       "ros2_ws/src/racecar_mission/racecar_mission/mission_node.py",
       "ros2_ws/src/racecar_mission/racecar_mission/preflight.py"
     ]
+  },
+  "arrival_optimization": {
+    "date": "2026-10-18T14:35:26.995150+08:00",
+    "base_commit": "80a87eb",
+    "validation_directory": "output/arrival_validation_20261018-143526",
+    "objective": "reduce time to finish through planning/tracking algorithms without raising vehicle motion limits",
+    "changes": [
+      "consume completed async plans without retry-backoff delay",
+      "keep all margin retries off ROS callbacks; return the selected reserve explicitly",
+      "prefetch plans during mandatory stationary waits and revalidate current map/origin/goal",
+      "certify a lower-cost forward arc on the final leg with >=0.13m reserve; preserve all output limits and guards"
+    ],
+    "comparison": {
+      "matched_cases": 130,
+      "same_case_set": true,
+      "identical_inputs": true,
+      "identical_motion_limits": true,
+      "success_before": 108,
+      "success_after": 108,
+      "new_failures": [],
+      "new_successes": [],
+      "paired_successes": 108,
+      "mean_full_time_before_s": 46.2831,
+      "mean_full_time_after_s": 44.8752,
+      "mean_competition_time_before_s": 42.8683,
+      "mean_competition_time_after_s": 41.4604,
+      "contact_runs_after": 0,
+      "passed": true,
+      "identical_time_budget": true,
+      "identical_simulator": true
+    },
+    "average_truth_path_m": {
+      "before": 10.24672400250435,
+      "after": 10.2269364441784
+    },
+    "max_time_saved_s": 3.8000000000000043,
+    "max_slowdown_s": 0.04999999999999716,
+    "held_out_random_cases": {
+      "seed_start": 40,
+      "seeds_per_route": 20,
+      "runs": 40,
+      "before_success": 31,
+      "after_success": 31
+    },
+    "baseline_report": "output/arrival_validation_20261018-143526/baseline/matrix.json",
+    "candidate_report": "output/arrival_validation_20261018-143526/candidate/matrix.json",
+    "input_digest_note": "Scene digests added after execution from the preserved, unchanged source/profile snapshots; timings and outcomes are unchanged.",
+    "unit_tests": {
+      "total": 128,
+      "passed": 127,
+      "skipped": 1,
+      "skip_reason": "optional ONNX Runtime unavailable on host",
+      "log": "output/arrival_validation_20261018-143526/arrival-final-unit-tests.log"
+    },
+    "selfcheck": {
+      "passed": true,
+      "log": "output/arrival_validation_20261018-143526/arrival-final-selfcheck.log"
+    },
+    "native_ros": [
+      {
+        "name": "ros_A",
+        "passed": true,
+        "route": "A",
+        "reason": "mission_done",
+        "summary": {
+          "route": "A",
+          "selected_route": "A",
+          "simulation_namespace": "/crossfire_sim_8312a82c5ec842658b5a7e61a2abd96e",
+          "node_launcher": "direct_python",
+          "physical_output_publishers_at_end": {
+            "/car_cmd_vel": 0,
+            "/cmd_vel": 0
+          },
+          "finish_body_in_camp_truth": true,
+          "initial_route": "A",
+          "seed": 3,
+          "transport": "real ROS2 Humble DDS",
+          "monochrome": true,
+          "use_card": false,
+          "ai_backend_requested": "auto",
+          "ai_backend": "disabled",
+          "drive_model": "ackermann",
+          "final_state": "DONE",
+          "success": true,
+          "reached_camp_truth": true,
+          "cone_contacts": 0,
+          "wall_contacts": 0,
+          "sim_time": 63.701716480998265,
+          "metrics": {
+            "route": "A",
+            "t_start_line": 3.662,
+            "t_finish": 62.782,
+            "run_time_s": 59.12,
+            "blue_contacts": 0,
+            "red_contacts": 0,
+            "penalties_s": 0.0,
+            "announced": true,
+            "stopped_at_finish": true,
+            "hold_actual_s": 3.0,
+            "min_cone_clearance_m": 0.359,
+            "drive_model": "ackermann",
+            "monochrome": true,
+            "use_card": false,
+            "planner_engine": "cpp_native",
+            "ai_backend": "disabled",
+            "ai_details": {
+              "requested": "auto",
+              "actual": "disabled",
+              "providers": [],
+              "fallback_reason": "monochrome mode"
+            },
+            "motion_strategy": "forward_first_bounded_reverse",
+            "motion_settings": {
+              "forward_mps": 0.4,
+              "corner_mps": 0.25,
+              "reverse_mps": 0.2,
+              "accel_mps2": 0.6,
+              "brake_mps2": 0.6,
+              "lookahead_m": 0.18,
+              "planning_margin_m": 0.1,
+              "arrival_m": 0.18,
+              "shift_pause_s": 0.2
+            },
+            "mapping_time_s": 2.019,
+            "mapping_scans": 19,
+            "mapping_tracks": 12,
+            "planning_calls": 8,
+            "planning_wall_s": 0.012388,
+            "terminal_shortcuts": 1
+          },
+          "received_commands": 2787,
+          "reason": "mission_done",
+          "travel_distance_m": {
+            "forward": 12.951,
+            "reverse": 1.119
+          }
+        },
+        "fault": null,
+        "result_directory": "output/arrival_validation_20261018-143526/ros_A"
+      },
+      {
+        "name": "ros_B",
+        "passed": true,
+        "route": "B",
+        "reason": "mission_done",
+        "summary": {
+          "route": "B",
+          "selected_route": "B",
+          "simulation_namespace": "/crossfire_sim_9a0159880d62483699f02735d7ca9092",
+          "node_launcher": "direct_python",
+          "physical_output_publishers_at_end": {
+            "/car_cmd_vel": 0,
+            "/cmd_vel": 0
+          },
+          "finish_body_in_camp_truth": true,
+          "initial_route": "A",
+          "seed": 3,
+          "transport": "real ROS2 Humble DDS",
+          "monochrome": false,
+          "use_card": true,
+          "ai_backend_requested": "auto",
+          "ai_backend": "fast_vectorized",
+          "drive_model": "ackermann",
+          "final_state": "DONE",
+          "success": true,
+          "reached_camp_truth": true,
+          "cone_contacts": 0,
+          "wall_contacts": 0,
+          "sim_time": 40.44076674799989,
+          "metrics": {
+            "route": "B",
+            "t_start_line": 3.722,
+            "t_finish": 39.683,
+            "run_time_s": 35.961,
+            "blue_contacts": 0,
+            "red_contacts": 0,
+            "penalties_s": 0.0,
+            "announced": true,
+            "stopped_at_finish": true,
+            "hold_actual_s": 3.002,
+            "min_cone_clearance_m": 0.347,
+            "drive_model": "ackermann",
+            "monochrome": false,
+            "use_card": true,
+            "planner_engine": "cpp_native",
+            "ai_backend": "fast_vectorized",
+            "ai_details": {
+              "requested": "auto",
+              "actual": "fast_vectorized",
+              "providers": [
+                "CPU/NumPy"
+              ],
+              "fallback_reason": "no model configured; using CPU color thresholds"
+            },
+            "motion_strategy": "forward_first_bounded_reverse",
+            "motion_settings": {
+              "forward_mps": 0.4,
+              "corner_mps": 0.25,
+              "reverse_mps": 0.2,
+              "accel_mps2": 0.6,
+              "brake_mps2": 0.6,
+              "lookahead_m": 0.18,
+              "planning_margin_m": 0.1,
+              "arrival_m": 0.18,
+              "shift_pause_s": 0.2
+            },
+            "mapping_time_s": 2.019,
+            "mapping_scans": 21,
+            "mapping_tracks": 10,
+            "planning_calls": 3,
+            "planning_wall_s": 0.006343,
+            "terminal_shortcuts": 1
+          },
+          "received_commands": 1904,
+          "reason": "mission_done",
+          "travel_distance_m": {
+            "forward": 8.424,
+            "reverse": 0.582
+          }
+        },
+        "fault": null,
+        "result_directory": "output/arrival_validation_20261018-143526/ros_B"
+      },
+      {
+        "name": "ros_estop",
+        "passed": true,
+        "route": "A",
+        "reason": "fault_test",
+        "summary": {
+          "route": "A",
+          "selected_route": "A",
+          "simulation_namespace": "/crossfire_sim_e6232571a02544a797a51b57c5b2993b",
+          "node_launcher": "direct_python",
+          "physical_output_publishers_at_end": {
+            "/car_cmd_vel": 0,
+            "/cmd_vel": 0
+          },
+          "finish_body_in_camp_truth": false,
+          "initial_route": "A",
+          "seed": 3,
+          "transport": "real ROS2 Humble DDS",
+          "monochrome": true,
+          "use_card": false,
+          "ai_backend_requested": "auto",
+          "ai_backend": "disabled",
+          "drive_model": "ackermann",
+          "final_state": "GO_STRONGHOLD",
+          "success": false,
+          "reached_camp_truth": false,
+          "cone_contacts": 0,
+          "wall_contacts": 0,
+          "sim_time": 6.000552890999874,
+          "metrics": {
+            "route": "A",
+            "t_start_line": 3.619,
+            "t_finish": null,
+            "run_time_s": null,
+            "blue_contacts": 0,
+            "red_contacts": 0,
+            "penalties_s": 0.0,
+            "announced": true,
+            "stopped_at_finish": false,
+            "hold_actual_s": null,
+            "min_cone_clearance_m": null,
+            "drive_model": "ackermann",
+            "monochrome": true,
+            "use_card": false,
+            "planner_engine": "cpp_native",
+            "ai_backend": "disabled",
+            "ai_details": {
+              "requested": "auto",
+              "actual": "disabled",
+              "providers": [],
+              "fallback_reason": "monochrome mode"
+            },
+            "motion_strategy": "forward_first_bounded_reverse",
+            "motion_settings": {
+              "forward_mps": 0.4,
+              "corner_mps": 0.25,
+              "reverse_mps": 0.2,
+              "accel_mps2": 0.6,
+              "brake_mps2": 0.6,
+              "lookahead_m": 0.18,
+              "planning_margin_m": 0.1,
+              "arrival_m": 0.18,
+              "shift_pause_s": 0.2
+            },
+            "mapping_time_s": 2.004,
+            "mapping_scans": 20,
+            "mapping_tracks": 10,
+            "planning_calls": 1,
+            "planning_wall_s": 0.000658
+          },
+          "received_commands": 263,
+          "reason": "fault_test",
+          "travel_distance_m": {
+            "forward": 0.319,
+            "reverse": 0.0
+          }
+        },
+        "fault": {
+          "fault": "estop",
+          "initial_command": [
+            0.25,
+            0.47713485854305704
+          ],
+          "stopped_speed": 8.431319255936769e-09,
+          "first_zero_s": 0.02083888900006059,
+          "stayed_zero": true,
+          "gateway_faults": [
+            "latched_estop"
+          ],
+          "passed": true
+        },
+        "result_directory": "output/arrival_validation_20261018-143526/ros_estop"
+      },
+      {
+        "name": "ros_scan_drop",
+        "passed": true,
+        "route": "A",
+        "reason": "fault_test",
+        "summary": {
+          "route": "A",
+          "selected_route": "A",
+          "simulation_namespace": "/crossfire_sim_9079bf0128134a16b1d0d27a5576f3af",
+          "node_launcher": "direct_python",
+          "physical_output_publishers_at_end": {
+            "/car_cmd_vel": 0,
+            "/cmd_vel": 0
+          },
+          "finish_body_in_camp_truth": false,
+          "initial_route": "A",
+          "seed": 3,
+          "transport": "real ROS2 Humble DDS",
+          "monochrome": true,
+          "use_card": false,
+          "ai_backend_requested": "auto",
+          "ai_backend": "disabled",
+          "drive_model": "ackermann",
+          "final_state": "GO_STRONGHOLD",
+          "success": false,
+          "reached_camp_truth": false,
+          "cone_contacts": 0,
+          "wall_contacts": 0,
+          "sim_time": 5.990637642999894,
+          "metrics": {
+            "route": "A",
+            "t_start_line": 3.619,
+            "t_finish": null,
+            "run_time_s": null,
+            "blue_contacts": 0,
+            "red_contacts": 0,
+            "penalties_s": 0.0,
+            "announced": true,
+            "stopped_at_finish": false,
+            "hold_actual_s": null,
+            "min_cone_clearance_m": null,
+            "drive_model": "ackermann",
+            "monochrome": true,
+            "use_card": false,
+            "planner_engine": "cpp_native",
+            "ai_backend": "disabled",
+            "ai_details": {
+              "requested": "auto",
+              "actual": "disabled",
+              "providers": [],
+              "fallback_reason": "monochrome mode"
+            },
+            "motion_strategy": "forward_first_bounded_reverse",
+            "motion_settings": {
+              "forward_mps": 0.4,
+              "corner_mps": 0.25,
+              "reverse_mps": 0.2,
+              "accel_mps2": 0.6,
+              "brake_mps2": 0.6,
+              "lookahead_m": 0.18,
+              "planning_margin_m": 0.1,
+              "arrival_m": 0.18,
+              "shift_pause_s": 0.2
+            },
+            "mapping_time_s": 2.002,
+            "mapping_scans": 20,
+            "mapping_tracks": 10,
+            "planning_calls": 1,
+            "planning_wall_s": 0.000632
+          },
+          "received_commands": 271,
+          "reason": "fault_test",
+          "travel_distance_m": {
+            "forward": 0.423,
+            "reverse": 0.0
+          }
+        },
+        "fault": {
+          "fault": "scan_drop",
+          "initial_command": [
+            0.25,
+            0.47713485854305704
+          ],
+          "stopped_speed": 3.528098077586216e-07,
+          "first_zero_s": 0.4442127510001228,
+          "stayed_zero": true,
+          "gateway_faults": [
+            "stale_scan"
+          ],
+          "passed": true
+        },
+        "result_directory": "output/arrival_validation_20261018-143526/ros_scan_drop"
+      }
+    ],
+    "rejected_candidates": [
+      {
+        "report": "output/arrival_shot_weight12_20261018/matrix.json",
+        "runs": 88,
+        "success": 71,
+        "new_failures": [
+          "random_A_17",
+          "random_A_19",
+          "random_A_34",
+          "random_B_9"
+        ]
+      },
+      {
+        "report": "output/arrival_projection_20261018/matrix.json",
+        "runs": 88,
+        "success": 67,
+        "new_failures": [
+          "random_A_2",
+          "random_A_17",
+          "random_A_27",
+          "random_A_34",
+          "random_B_10",
+          "random_B_12",
+          "random_B_27",
+          "random_B_34"
+        ]
+      },
+      {
+        "report": "output/arrival_projection_endpoint_20261018/matrix.json",
+        "runs": 88,
+        "success": 70,
+        "new_failures": [
+          "random_A_17",
+          "random_A_27",
+          "random_A_34",
+          "random_B_27",
+          "random_B_34"
+        ]
+      },
+      {
+        "report": "output/arrival_curves9_20261018/matrix.json",
+        "runs": 88,
+        "success": 69,
+        "new_failures": [
+          "random_A_17",
+          "random_A_19",
+          "random_A_20",
+          "random_A_24",
+          "random_A_27",
+          "random_A_34"
+        ]
+      },
+      {
+        "report": "output/arrival_guarded_tracking_20261018/matrix.json",
+        "runs": 88,
+        "success": 74,
+        "new_failures": [
+          "random_A_25"
+        ]
+      },
+      {
+        "report": "output/arrival_exit_aim_20261018/matrix.json",
+        "runs": 88,
+        "success": 71,
+        "new_failures": [
+          "random_A_17",
+          "random_A_31",
+          "random_A_34",
+          "random_B_30"
+        ]
+      },
+      {
+        "report": "output/arrival_continuity_20261018/matrix.json",
+        "runs": 88,
+        "success": 73,
+        "new_failures": [
+          "random_A_19",
+          "random_A_38",
+          "random_B_27"
+        ]
+      }
+    ],
+    "user_configuration_files_preserved": 42,
+    "video_full_decode_passed": true,
+    "source_sha256": {
+      "racelib/ackermann.py": "55832bc657c52aceb1df4d3b26e6201eea1e50ce18abc8271dd2f8255a11e3af",
+      "racelib/native/hybrid_astar_core.cpp": "7b76cbe7c36c7c44e70b3ca6ae4859f6b363367744bae6c6e4a1b0cda1134b3c",
+      "tools/benchmark_arrival.py": "02b9ac23d71978a8a95bdf792e5f2d2d6d9d35a6d9cb4a71f44bbc473dc55b01",
+      "tools/package_release.py": "6030b90fdd6b48f215c867325a35be8fe2b3af2b23e941930097962fa00a076d",
+      "tests/test_arrival_efficiency.py": "1aa10f949e6ecfe32a4221098911f9a4479906973033cb3ea542dc36a52901b7"
+    },
+    "simulator_sources_identical": true,
+    "native_cpp_source_unchanged": true,
+    "runtime_requires_docker": false,
+    "vehicle_tested": false,
+    "arm64_tested": false,
+    "npu_tested": false,
+    "test_boundary": "In-process paired matrix uses unchanged sensor/physics simulation and frozen inputs. Native ROS tests use existing isolated x86_64 Humble fixture only, with docker/colcon/ros2/pip/apt prohibited inside target commands. No vehicle actions or system dependency installs.",
+    "limitation": "22 original incomplete matrix cases remain; results are not a promise of arbitrary-track completion or board performance."
   }
 }
